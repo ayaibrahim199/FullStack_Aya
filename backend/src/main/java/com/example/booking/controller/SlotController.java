@@ -53,8 +53,22 @@ public class SlotController {
             @RequestParam String startTime,
             @RequestParam String endTime) {
         try {
+            System.out.println("DEBUG: Creating slot for teacherId: " + teacherId);
+            System.out.println("DEBUG: Start time: " + startTime + ", End time: " + endTime);
+            
             User teacher = userRepository.findById(teacherId)
-                    .orElseThrow(() -> new RuntimeException("Teacher not found"));
+                    .orElseThrow(() -> new RuntimeException("Teacher not found with ID: " + teacherId + ". Please make sure you're logged in with a teacher account."));
+            
+            System.out.println("DEBUG: Found teacher: " + teacher.getUsername());
+            
+            // Verify user has teacher role
+            boolean isTeacher = teacher.getRoles().stream()
+                    .anyMatch(role -> role.getName().equals("ROLE_TEACHER"));
+            
+            if (!isTeacher) {
+                return ResponseEntity.badRequest()
+                        .body("Error: User " + teacher.getUsername() + " does not have teacher role. Please sign up as a teacher.");
+            }
 
             AvailableSlot slot = new AvailableSlot();
             slot.setTeacher(teacher);
