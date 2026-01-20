@@ -225,16 +225,16 @@ function CalendarSlotView({ userId, userRole }) {
 
     // Build available slots for the week
     const weeklyAvailableSlots = weekDates.map(date => {
-      const daySlots = getAvailableTimeSlots(date);
       const existingSlots = getSlotsForDate(date);
       
-      return {
-        date,
-        dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
-        fullDate: date.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        isToday: isSameDay(date, today),
-        slots: daySlots.map(timeSlot => {
-          // Find matching slot from database
+      // For TEACHER: show template slots + existing slots
+      // For STUDENT: show ONLY existing slots from database
+      let slotsToShow;
+      
+      if (userRole === 'TEACHER') {
+        // Teacher sees all possible time slots
+        const daySlots = getAvailableTimeSlots(date);
+        slotsToShow = daySlots.map(timeSlot => {
           const matchedSlot = existingSlots.find(slot => {
             const slotStart = new Date(slot.startTime);
             const slotHour = slotStart.getHours().toString().padStart(2, '0');
@@ -247,7 +247,35 @@ function CalendarSlotView({ userId, userRole }) {
             slot: matchedSlot,
             status: matchedSlot ? matchedSlot.status : 'UNAVAILABLE'
           };
-        })
+        });
+      } else {
+        // Student sees ONLY slots that exist in database
+        slotsToShow = existingSlots.map(slot => {
+          const slotStart = new Date(slot.startTime);
+          const slotEnd = new Date(slot.endTime);
+          const startHour = slotStart.getHours();
+          const endHour = slotEnd.getHours();
+          const startPeriod = startHour >= 12 ? 'PM' : 'AM';
+          const endPeriod = endHour >= 12 ? 'PM' : 'AM';
+          const displayStartHour = startHour > 12 ? startHour - 12 : (startHour === 0 ? 12 : startHour);
+          const displayEndHour = endHour > 12 ? endHour - 12 : (endHour === 0 ? 12 : endHour);
+          
+          return {
+            start: `${slotStart.getHours().toString().padStart(2, '0')}:${slotStart.getMinutes().toString().padStart(2, '0')}`,
+            end: `${slotEnd.getHours().toString().padStart(2, '0')}:${slotEnd.getMinutes().toString().padStart(2, '0')}`,
+            display: `${displayStartHour}:${slotStart.getMinutes().toString().padStart(2, '0')} ${startPeriod} – ${displayEndHour}:${slotEnd.getMinutes().toString().padStart(2, '0')} ${endPeriod}`,
+            slot: slot,
+            status: slot.status
+          };
+        });
+      }
+      
+      return {
+        date,
+        dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
+        fullDate: date.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        isToday: isSameDay(date, today),
+        slots: slotsToShow
       };
     });
 
@@ -272,9 +300,9 @@ function CalendarSlotView({ userId, userRole }) {
             </>
           ) : (
             <>
-              <p><strong>🔄 Regular Weekly Appointments</strong></p>
-              <p>Book once, and this time slot will be yours every week!</p>
-              <p><strong>Schedule:</strong> Sun: 6-7 PM, 9-10 PM (4 slots) | Mon-Fri: 3-9 PM (6 slots) | Sat: 9-11 AM (2 slots)</p>
+              <p><strong>📅 Available Appointment Slots</strong></p>
+              <p>Book any available slot - you'll see only the time slots your teacher has created!</p>
+              <p>Slots are updated in real-time when teachers add, edit, or remove them.</p>
             </>
           )}
         </div>
@@ -288,36 +316,42 @@ function CalendarSlotView({ userId, userRole }) {
               </div>
               
               <ul className="time-slots-list">
-                {day.slots.map((timeSlot, index) => {
-                  const slot = timeSlot.slot;
-                  const isAvailable = slot && slot.status === 'AVAILABLE';
-                  const isBooked = slot && slot.status === 'BOOKED';
-                  const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
-                  
-                  return (
-                    <li
-                      key={index}
-                      className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable-slot' : ''}`}
-                      onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id, day.dayName, timeSlot.display)}
-                    >
-                      <span className="slot-time-text">{timeSlot.display}</span>
-                      <span className="slot-date-text">({day.fullDate})</span>
-                      
-                      {isAvailable && <span className="status-tag available-tag">✓ Available</span>}
-                      {isBooked && <span className="status-tag booked-tag">Booked</span>}
-                      {isUnavailable && <span className="status-tag unavailable-tag">Not Open</span>}
-                      
-                      {userRole === 'STUDENT' && isAvailable && (
-                        <button className="book-btn-inline" onClick={(e) => {
-                          e.stopPropagation();
-                          handleBookSlot(slot.id, day.dayName, timeSlot.display);
-                        }}>
-                          Book
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
+                {day.slots.length === 0 && userRole === 'STUDENT' ? (
+                  <li className="slot-item unavailable-slot">
+                    <span className="slot-time-text">No slots available for this day</span>
+                  </li>
+                ) : (
+                  day.slots.map((timeSlot, index) => {
+                    const slot = timeSlot.slot;
+                    const isAvailable = slot && slot.status === 'AVAILABLE';
+                    const isBooked = slot && slot.status === 'BOOKED';
+                    const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
+                    
+                    return (
+                      <li
+                        key={index}
+                        className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable-slot' : ''}`}
+                        onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id, day.dayName, timeSlot.display)}
+                      >
+                        <span className="slot-time-text">{timeSlot.display}</span>
+                        <span className="slot-date-text">({day.fullDate})</span>
+                        
+                        {isAvailable && <span className="status-tag available-tag">✓ Available</span>}
+                        {isBooked && <span className="status-tag booked-tag">Booked</span>}
+                        {isUnavailable && <span className="status-tag unavailable-tag">Not Open</span>}
+                        
+                        {userRole === 'STUDENT' && isAvailable && (
+                          <button className="book-btn-inline" onClick={(e) => {
+                            e.stopPropagation();
+                            handleBookSlot(slot.id, day.dayName, timeSlot.display);
+                          }}>
+                            Book
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })
+                )}
               </ul>
             </div>
           ))}
