@@ -32,14 +32,17 @@ function CalendarSlotView({ userId, userRole }) {
     fetchSlots();
   }, [fetchSlots, selectedDate, currentWeek]);
 
-  const handleBookSlot = async (slotId) => {
+  const handleBookSlot = async (slotId, dayName, timeDisplay) => {
     if (userRole !== 'STUDENT') return;
+    
+    const confirmMessage = `Book ${dayName} at ${timeDisplay} for ALL upcoming weeks?\n\nThis will be your regular weekly appointment.`;
+    if (!window.confirm(confirmMessage)) return;
     
     try {
       setBookingSlotId(slotId);
       await api.post(`/bookings/book?studentId=${userId}&slotId=${slotId}`);
-      setSuccessMessage('✅ Appointment booked successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setSuccessMessage('✅ Weekly appointment booked successfully! This time slot is now reserved for you every week.');
+      setTimeout(() => setSuccessMessage(''), 5000);
       fetchSlots();
     } catch (err) {
       setError('Failed to book appointment: ' + (err.response?.data?.message || err.response?.data || err.message));
@@ -115,11 +118,12 @@ function CalendarSlotView({ userId, userRole }) {
     });
   };
 
-  const navigateWeek = (direction) => {
-    const newWeek = new Date(currentWeek);
-    newWeek.setDate(currentWeek.getDate() + (direction * 7));
-    setCurrentWeek(newWeek);
-  };
+  // Show only current week - no navigation needed
+  // const navigateWeek = (direction) => {
+  //   const newWeek = new Date(currentWeek);
+  //   newWeek.setDate(currentWeek.getDate() + (direction * 7));
+  //   setCurrentWeek(newWeek);
+  // };
 
   const navigateDay = (direction) => {
     const newDate = new Date(selectedDate);
@@ -198,22 +202,16 @@ function CalendarSlotView({ userId, userRole }) {
     return (
       <div className="calendar-week-view">
         <div className="week-navigation">
-          <button onClick={() => navigateWeek(-1)} className="nav-btn">
-            ← Previous Week
-          </button>
           <h3 className="week-range">
-            {weekDates[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - 
-            {weekDates[6].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            📅 Weekly Schedule
           </h3>
-          <button onClick={() => navigateWeek(1)} className="nav-btn">
-            Next Week →
-          </button>
+          <p className="recurring-note">Select your preferred weekly time slot</p>
         </div>
 
         <div className="availability-info">
-          <p><strong>📅 Teacher's Weekly Schedule:</strong></p>
-          <p>Sunday - Friday: 3:00 PM - 9:00 PM (6 slots per day)</p>
-          <p>Saturday: 9:00 AM - 11:00 AM (2 morning slots)</p>
+          <p><strong>🔄 Regular Weekly Appointments</strong></p>
+          <p>Book once, and this time slot will be yours every week!</p>
+          <p><strong>Schedule:</strong> Sun-Fri: 3 PM - 9 PM (6 slots) | Sat: 9 AM - 11 AM (2 slots)</p>
         </div>
         
         <div className="slots-list-container">
@@ -235,7 +233,7 @@ function CalendarSlotView({ userId, userRole }) {
                     <li
                       key={index}
                       className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable-slot' : ''}`}
-                      onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id)}
+                      onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id, day.dayName, timeSlot.display)}
                     >
                       <span className="slot-time-text">{timeSlot.display}</span>
                       <span className="slot-date-text">({day.fullDate})</span>
@@ -247,7 +245,7 @@ function CalendarSlotView({ userId, userRole }) {
                       {userRole === 'STUDENT' && isAvailable && (
                         <button className="book-btn-inline" onClick={(e) => {
                           e.stopPropagation();
-                          handleBookSlot(slot.id);
+                          handleBookSlot(slot.id, day.dayName, timeSlot.display);
                         }}>
                           Book
                         </button>
@@ -442,45 +440,36 @@ function CalendarSlotView({ userId, userRole }) {
 
         .week-range {
           margin: 0;
-          font-size: 20px;
+          font-size: 24px;
           font-weight: 700;
           color: #2c3e50;
+          text-align: center;
         }
 
-        .nav-btn {
-          padding: 12px 24px;
-          background: #667eea;
-          color: white;
-          border: none;
-          border-radius: 10px;
-          cursor: pointer;
+        .recurring-note {
+          text-align: center;
+          color: #667eea;
           font-size: 14px;
           font-weight: 600;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-        }
-
-        .nav-btn:hover {
-          background: #5568d3;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+          margin: 8px 0 0 0;
         }
 
         .availability-info {
           padding: 20px 32px;
-          background: #f0f7ff;
-          border-bottom: 2px solid #d0e7ff;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-bottom: 2px solid #5568d3;
           text-align: center;
+          color: white;
         }
 
         .availability-info p {
           margin: 5px 0;
-          color: #2c3e50;
+          color: white;
           font-size: 14px;
         }
 
         .availability-info strong {
-          color: #667eea;
+          color: #fff;
           font-size: 16px;
         }
 

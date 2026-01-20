@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
-import AvailableSlots from './pages/AvailableSlots';
+import CalendarSlotView from './pages/CalendarSlotView';
 import MyBookings from './pages/MyBookings';
 import StudentStatistics from './pages/StudentStatistics';
 import TeacherDashboard from './pages/TeacherDashboard';
@@ -91,7 +91,7 @@ function App() {
         />
         <Route 
           path="/available-slots" 
-          element={isAuthenticated ? <AvailableSlots userId={userId} /> : <Navigate to="/login" />} 
+          element={isAuthenticated ? <CalendarSlotView userId={userId} userRole={userRole} /> : <Navigate to="/login" />} 
         />
         <Route 
           path="/my-bookings" 
