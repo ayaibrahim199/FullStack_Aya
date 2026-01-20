@@ -139,7 +139,7 @@ function CalendarSlotView({ userId, userRole }) {
     return statusColors[slot.status] || statusColors['AVAILABLE'];
   };
 
-  // Week View Component - Simple Available Slots Table
+  // Week View Component - Simple Available Slots List
   const WeekView = () => {
     const weekDates = getWeekDates(currentWeek);
     const today = new Date();
@@ -151,19 +151,19 @@ function CalendarSlotView({ userId, userRole }) {
       // Saturday: 2 morning slots only
       if (dayOfWeek === 6) {
         return [
-          { start: '09:00', end: '10:00', display: '9:00 AM - 10:00 AM' },
-          { start: '10:00', end: '11:00', display: '10:00 AM - 11:00 AM' }
+          { start: '09:00', end: '10:00', display: '9:00 AM – 10:00 AM' },
+          { start: '10:00', end: '11:00', display: '10:00 AM – 11:00 AM' }
         ];
       }
       
-      // Sunday to Friday: 5 slots from 3 PM to 9 PM
+      // Sunday to Friday: 6 slots from 3 PM to 9 PM
       return [
-        { start: '15:00', end: '16:00', display: '3:00 PM - 4:00 PM' },
-        { start: '16:00', end: '17:00', display: '4:00 PM - 5:00 PM' },
-        { start: '17:00', end: '18:00', display: '5:00 PM - 6:00 PM' },
-        { start: '18:00', end: '19:00', display: '6:00 PM - 7:00 PM' },
-        { start: '19:00', end: '20:00', display: '7:00 PM - 8:00 PM' },
-        { start: '20:00', end: '21:00', display: '8:00 PM - 9:00 PM' }
+        { start: '15:00', end: '16:00', display: '3:00 PM – 4:00 PM' },
+        { start: '16:00', end: '17:00', display: '4:00 PM – 5:00 PM' },
+        { start: '17:00', end: '18:00', display: '5:00 PM – 6:00 PM' },
+        { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
+        { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
+        { start: '20:00', end: '21:00', display: '8:00 PM – 9:00 PM' }
       ];
     };
 
@@ -175,7 +175,7 @@ function CalendarSlotView({ userId, userRole }) {
       return {
         date,
         dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
-        shortDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: date.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }),
         isToday: isSameDay(date, today),
         slots: daySlots.map(timeSlot => {
           // Find matching slot from database
@@ -216,64 +216,48 @@ function CalendarSlotView({ userId, userRole }) {
           <p>Saturday: 9:00 AM - 11:00 AM (2 morning slots)</p>
         </div>
         
-        <div className="available-slots-table-wrapper">
-          <table className="available-slots-table">
-            <thead>
-              <tr>
-                <th className="day-header-cell">Day</th>
-                <th className="slots-header-cell">Available Time Slots</th>
-              </tr>
-            </thead>
-            <tbody>
-              {weeklyAvailableSlots.map((day) => (
-                <tr key={day.date.toISOString()} className={`day-row ${day.isToday ? 'today-row' : ''}`}>
-                  <td className="day-cell">
-                    <div className="day-info">
-                      <div className="day-name-large">{day.dayName}</div>
-                      <div className="day-date-large">{day.shortDate}</div>
-                      {day.isToday && <span className="today-badge-large">Today</span>}
-                    </div>
-                  </td>
-                  <td className="slots-cell">
-                    <div className="slots-grid">
-                      {day.slots.map((timeSlot, index) => {
-                        const slot = timeSlot.slot;
-                        const isAvailable = slot && slot.status === 'AVAILABLE';
-                        const isBooked = slot && slot.status === 'BOOKED';
-                        const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
-                        
-                        return (
-                          <div
-                            key={index}
-                            className={`time-slot-card ${isAvailable ? 'available' : ''} ${isBooked ? 'booked' : ''} ${isUnavailable ? 'unavailable' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable' : ''}`}
-                            onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id)}
-                          >
-                            <div className="slot-time">{timeSlot.display}</div>
-                            {slot && slot.teacher && (
-                              <div className="slot-teacher-name">👨‍🏫 {slot.teacher.username}</div>
-                            )}
-                            <div className="slot-status-indicator">
-                              {isAvailable && <span className="status-badge available-badge">✓ Available</span>}
-                              {isBooked && <span className="status-badge booked-badge">📅 Booked</span>}
-                              {isUnavailable && <span className="status-badge unavailable-badge">— Not Open</span>}
-                            </div>
-                            {userRole === 'STUDENT' && isAvailable && (
-                              <button className="quick-book-btn" onClick={(e) => {
-                                e.stopPropagation();
-                                handleBookSlot(slot.id);
-                              }}>
-                                Book Now
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="slots-list-container">
+          {weeklyAvailableSlots.map((day) => (
+            <div key={day.date.toISOString()} className={`day-section ${day.isToday ? 'today-section' : ''}`}>
+              <div className="day-header">
+                <h2 className="day-name-heading">{day.dayName}</h2>
+                {day.isToday && <span className="today-badge">Today</span>}
+              </div>
+              
+              <ul className="time-slots-list">
+                {day.slots.map((timeSlot, index) => {
+                  const slot = timeSlot.slot;
+                  const isAvailable = slot && slot.status === 'AVAILABLE';
+                  const isBooked = slot && slot.status === 'BOOKED';
+                  const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
+                  
+                  return (
+                    <li
+                      key={index}
+                      className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable-slot' : ''}`}
+                      onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id)}
+                    >
+                      <span className="slot-time-text">{timeSlot.display}</span>
+                      <span className="slot-date-text">({day.fullDate})</span>
+                      
+                      {isAvailable && <span className="status-tag available-tag">✓ Available</span>}
+                      {isBooked && <span className="status-tag booked-tag">Booked</span>}
+                      {isUnavailable && <span className="status-tag unavailable-tag">Not Open</span>}
+                      
+                      {userRole === 'STUDENT' && isAvailable && (
+                        <button className="book-btn-inline" onClick={(e) => {
+                          e.stopPropagation();
+                          handleBookSlot(slot.id);
+                        }}>
+                          Book
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
 
         <div className="legend-simple">
@@ -500,199 +484,170 @@ function CalendarSlotView({ userId, userRole }) {
           font-size: 16px;
         }
 
-        .available-slots-table-wrapper {
-          padding: 24px;
-          overflow-x: auto;
+        /* Slots List Container */
+        .slots-list-container {
+          padding: 32px;
+          max-width: 900px;
+          margin: 0 auto;
         }
 
-        .available-slots-table {
-          width: 100%;
-          border-collapse: separate;
-          border-spacing: 0;
-        }
-
-        .day-header-cell {
-          width: 180px;
-          background: #2c3e50;
-          color: white;
-          padding: 16px;
-          font-weight: 700;
-          font-size: 15px;
-          text-align: left;
-          border-top-left-radius: 12px;
-        }
-
-        .slots-header-cell {
-          background: #2c3e50;
-          color: white;
-          padding: 16px;
-          font-weight: 700;
-          font-size: 15px;
-          text-align: left;
-          border-top-right-radius: 12px;
-        }
-
-        .day-row {
+        .day-section {
+          margin-bottom: 40px;
+          padding-bottom: 32px;
           border-bottom: 2px solid #e9ecef;
-          transition: background 0.2s ease;
         }
 
-        .day-row:hover {
-          background: #f8f9fa;
+        .day-section:last-child {
+          border-bottom: none;
         }
 
-        .day-row.today-row {
-          background: #fff8f0;
-        }
-
-        .day-row.today-row:hover {
-          background: #fff3e6;
-        }
-
-        .day-cell {
+        .day-section.today-section {
+          background: linear-gradient(to right, #fff8f0, #ffffff);
           padding: 24px;
-          vertical-align: top;
-          border-right: 2px solid #e9ecef;
+          border-radius: 12px;
+          border: 2px solid #ffc107;
         }
 
-        .day-info {
+        .day-header {
           display: flex;
-          flex-direction: column;
-          gap: 8px;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 20px;
         }
 
-        .day-name-large {
-          font-size: 18px;
+        .day-name-heading {
+          margin: 0;
+          font-size: 28px;
           font-weight: 700;
           color: #2c3e50;
         }
 
-        .day-date-large {
-          font-size: 14px;
-          color: #6c757d;
-          font-weight: 500;
-        }
-
-        .today-badge-large {
-          display: inline-block;
+        .today-badge {
           background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
           color: white;
-          padding: 4px 12px;
-          border-radius: 16px;
-          font-size: 11px;
+          padding: 6px 16px;
+          border-radius: 20px;
+          font-size: 12px;
           font-weight: 700;
           text-transform: uppercase;
           box-shadow: 0 2px 8px rgba(240, 147, 251, 0.4);
-          width: fit-content;
         }
 
-        .slots-cell {
-          padding: 16px;
+        .time-slots-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
         }
 
-        .slots-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        .slot-item {
+          display: flex;
+          align-items: center;
           gap: 12px;
-        }
-
-        .time-slot-card {
-          background: #f8f9fa;
+          padding: 16px 20px;
+          margin-bottom: 12px;
+          background: white;
           border: 2px solid #dee2e6;
           border-radius: 10px;
-          padding: 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
           transition: all 0.3s ease;
-          min-height: 120px;
+          position: relative;
+          padding-left: 40px;
         }
 
-        .time-slot-card.available {
+        .slot-item::before {
+          content: "•";
+          position: absolute;
+          left: 20px;
+          font-size: 20px;
+          color: #6c757d;
+        }
+
+        .slot-item.available-slot {
           background: #d4edda;
           border-color: #28a745;
           border-left: 5px solid #28a745;
         }
 
-        .time-slot-card.booked {
+        .slot-item.available-slot::before {
+          color: #28a745;
+        }
+
+        .slot-item.booked-slot {
           background: #fff3cd;
           border-color: #ffc107;
           border-left: 5px solid #ffc107;
         }
 
-        .time-slot-card.unavailable {
+        .slot-item.booked-slot::before {
+          color: #ffc107;
+        }
+
+        .slot-item.unavailable-slot {
           background: #f8f9fa;
           border-color: #dee2e6;
           opacity: 0.6;
         }
 
-        .time-slot-card.clickable {
+        .slot-item.clickable-slot {
           cursor: pointer;
         }
 
-        .time-slot-card.clickable:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 8px 24px rgba(40, 167, 69, 0.3);
+        .slot-item.clickable-slot:hover {
+          transform: translateX(8px);
+          box-shadow: 0 4px 16px rgba(40, 167, 69, 0.2);
         }
 
-        .slot-time {
-          font-size: 15px;
+        .slot-time-text {
+          font-size: 18px;
           font-weight: 700;
           color: #2c3e50;
-          text-align: center;
+          min-width: 180px;
         }
 
-        .slot-teacher-name {
-          font-size: 12px;
-          color: #495057;
-          text-align: center;
+        .slot-date-text {
+          font-size: 16px;
+          color: #6c757d;
+          font-weight: 400;
+          margin-left: 8px;
         }
 
-        .slot-status-indicator {
-          display: flex;
-          justify-content: center;
-          margin-top: auto;
-        }
-
-        .status-badge {
-          padding: 6px 12px;
+        .status-tag {
+          margin-left: auto;
+          padding: 6px 14px;
           border-radius: 16px;
-          font-size: 11px;
-          font-weight: 700;
+          font-size: 12px;
+          font-weight: 600;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
         }
 
-        .available-badge {
+        .status-tag.available-tag {
           background: #28a745;
           color: white;
         }
 
-        .booked-badge {
+        .status-tag.booked-tag {
           background: #ffc107;
           color: #856404;
         }
 
-        .unavailable-badge {
+        .status-tag.unavailable-tag {
           background: #6c757d;
           color: white;
         }
 
-        .quick-book-btn {
-          margin-top: 8px;
-          padding: 8px 16px;
+        .book-btn-inline {
+          padding: 8px 20px;
           background: #667eea;
           color: white;
           border: none;
           border-radius: 8px;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
-          width: 100%;
+          margin-left: 12px;
         }
 
-        .quick-book-btn:hover {
+        .book-btn-inline:hover {
           background: #5568d3;
           transform: scale(1.05);
         }
@@ -891,14 +846,6 @@ function CalendarSlotView({ userId, userRole }) {
             padding: 10px;
           }
 
-          .week-grid {
-            grid-template-columns: 60px repeat(7, 1fr);
-          }
-
-          .slot-card {
-            font-size: 8px;
-          }
-
           .calendar-header {
             flex-direction: column;
             gap: 15px;
@@ -928,12 +875,39 @@ function CalendarSlotView({ userId, userRole }) {
             font-size: 12px;
           }
 
-          .day-cell {
-            padding: 16px;
+          .slots-list-container {
+            padding: 20px 16px;
           }
 
-          .slots-grid {
-            grid-template-columns: 1fr;
+          .day-name-heading {
+            font-size: 24px;
+          }
+
+          .slot-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 14px 16px 14px 36px;
+          }
+
+          .slot-time-text {
+            font-size: 16px;
+            min-width: auto;
+          }
+
+          .slot-date-text {
+            font-size: 14px;
+            margin-left: 0;
+          }
+
+          .status-tag {
+            margin-left: 0;
+          }
+
+          .book-btn-inline {
+            width: 100%;
+            margin-left: 0;
+            margin-top: 8px;
           }
 
           .legend-simple {
