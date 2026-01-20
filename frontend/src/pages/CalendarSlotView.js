@@ -12,7 +12,6 @@ function CalendarSlotView({ userId, userRole }) {
   const [bookingSlotId, setBookingSlotId] = useState(null);
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'day'
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [currentWeek, setCurrentWeek] = useState(new Date());
   const navigate = useNavigate();
 
   const fetchSlots = useCallback(async () => {
@@ -31,7 +30,7 @@ function CalendarSlotView({ userId, userRole }) {
 
   useEffect(() => {
     fetchSlots();
-  }, [fetchSlots, selectedDate, currentWeek]);
+  }, [fetchSlots]);
 
   const handleBookSlot = async (slotId, dayName, timeDisplay) => {
     if (userRole !== 'STUDENT') return;
@@ -142,26 +141,12 @@ function CalendarSlotView({ userId, userRole }) {
     return week;
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit',
       hour12: true 
     });
-  };
-
-  const formatTimeSimple = (hour, minute = 0) => {
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
-    return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
   };
 
   const isSameDay = (date1, date2) => {
@@ -175,30 +160,6 @@ function CalendarSlotView({ userId, userRole }) {
       return isSameDay(slotDate, date);
     }).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
   };
-
-  const getTimeSlots = () => {
-    const timeSlots = [];
-    for (let hour = 8; hour <= 20; hour++) {
-      timeSlots.push({ hour, minute: 0 });
-      timeSlots.push({ hour, minute: 30 });
-    }
-    return timeSlots;
-  };
-
-  const findSlotAtTime = (date, hour, minute) => {
-    const daySlots = getSlotsForDate(date);
-    return daySlots.find(slot => {
-      const slotStart = new Date(slot.startTime);
-      return slotStart.getHours() === hour && slotStart.getMinutes() === minute;
-    });
-  };
-
-  // Show only current week - no navigation needed
-  // const navigateWeek = (direction) => {
-  //   const newWeek = new Date(currentWeek);
-  //   newWeek.setDate(currentWeek.getDate() + (direction * 7));
-  //   setCurrentWeek(newWeek);
-  // };
 
   const navigateDay = (direction) => {
     const newDate = new Date(selectedDate);
@@ -220,7 +181,7 @@ function CalendarSlotView({ userId, userRole }) {
 
   // Week View Component - Simple Available Slots List
   const WeekView = () => {
-    const weekDates = getWeekDates(currentWeek);
+    const weekDates = getWeekDates(new Date());
     const today = new Date();
 
     // Build available slots for the week
