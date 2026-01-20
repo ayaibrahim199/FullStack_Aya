@@ -512,7 +512,7 @@ function CalendarSlotView({ userId, userRole }) {
       <div className="calendar-header">
         <div>
           <h1>📅 {normalizedRole === 'STUDENT' ? 'Available Appointment Slots' : 'My Teaching Schedule'}</h1>
-          <p>{userRole === 'STUDENT' ? 'Select a time that works best for you' : 'Manage your availability and bookings'}</p>
+          <p>{normalizedRole === 'STUDENT' ? 'Select a time that works best for you' : 'Manage your availability and bookings'}</p>
         </div>
         
         <div className="view-controls">
