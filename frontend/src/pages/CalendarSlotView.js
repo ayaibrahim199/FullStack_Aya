@@ -453,8 +453,8 @@ function CalendarSlotView({ userId, userRole }) {
     );
   };
 
-  // Safety check at render time
-  if (!userId || !userRole || (userRole !== 'STUDENT' && userRole !== 'TEACHER')) {
+  // Safety check at render time - only check if completely invalid
+  if (!userId) {
     return (
       <div className="calendar-container">
         <div className="loading">
@@ -464,11 +464,26 @@ function CalendarSlotView({ userId, userRole }) {
     );
   }
 
+  // If userRole is not properly formatted, try to use it anyway or show error
+  const normalizedRole = userRole ? userRole.replace('ROLE_', '') : '';
+  if (!normalizedRole || (normalizedRole !== 'STUDENT' && normalizedRole !== 'TEACHER')) {
+    return (
+      <div className="calendar-container">
+        <div className="error">
+          <div>⚠️ Invalid user role. Please log out and log in again.</div>
+          <button onClick={() => navigate('/dashboard')} style={{marginTop: '20px', padding: '10px 20px', cursor: 'pointer'}}>
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="calendar-container">
       <div className="calendar-header">
         <div>
-          <h1>📅 {userRole === 'STUDENT' ? 'Available Appointment Slots' : 'My Teaching Schedule'}</h1>
+          <h1>📅 {normalizedRole === 'STUDENT' ? 'Available Appointment Slots' : 'My Teaching Schedule'}</h1>
           <p>{userRole === 'STUDENT' ? 'Select a time that works best for you' : 'Manage your availability and bookings'}</p>
         </div>
         
@@ -509,7 +524,7 @@ function CalendarSlotView({ userId, userRole }) {
 
 CalendarSlotView.propTypes = {
   userId: PropTypes.string.isRequired,
-  userRole: PropTypes.oneOf(['STUDENT', 'TEACHER']).isRequired,
+  userRole: PropTypes.string.isRequired, // Accept any string, we normalize it internally
 };
 
 export default CalendarSlotView;
