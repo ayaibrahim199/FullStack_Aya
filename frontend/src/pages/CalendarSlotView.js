@@ -15,6 +15,17 @@ function CalendarSlotView({ userId, userRole }) {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const navigate = useNavigate();
 
+  // Safety check: ensure props are valid
+  if (!userId || !userRole || (userRole !== 'STUDENT' && userRole !== 'TEACHER')) {
+    return (
+      <div className="calendar-container">
+        <div className="loading">
+          <div>🔄 Loading authentication...</div>
+        </div>
+      </div>
+    );
+  }
+
   const fetchSlots = useCallback(async () => {
     try {
       setLoading(true);
