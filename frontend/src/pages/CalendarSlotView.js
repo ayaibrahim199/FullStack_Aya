@@ -51,6 +51,80 @@ function CalendarSlotView({ userId, userRole }) {
     }
   };
 
+  const handleCreateWeeklySlots = async () => {
+    if (userRole !== 'TEACHER') return;
+    
+    const confirmMessage = 'Create ALL weekly slots based on your schedule?\n\nThis will create slots for:\n• Sunday: 6 PM, 7 PM, 9 PM, 10 PM\n• Monday-Friday: 3 PM - 9 PM (6 slots each day)\n• Saturday: 9 AM - 11 AM';
+    if (!window.confirm(confirmMessage)) return;
+    
+    try {
+      setLoading(true);
+      const currentWeekDates = getWeekDates(new Date());
+      const slotsToCreate = [];
+      
+      currentWeekDates.forEach(date => {
+        const slots = getAvailableTimeSlots(date);
+        slots.forEach(slot => {
+          const startDateTime = new Date(date);
+          const [startHour, startMinute] = slot.start.split(':');
+          startDateTime.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+          
+          const endDateTime = new Date(date);
+          const [endHour, endMinute] = slot.end.split(':');
+          endDateTime.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
+          
+          slotsToCreate.push({
+            startTime: startDateTime.toISOString(),
+            endTime: endDateTime.toISOString()
+          });
+        });
+      });
+      
+      // Create all slots
+      for (const slotData of slotsToCreate) {
+        await api.post(`/slots/create?teacherId=${userId}`, slotData);
+      }
+      
+      setSuccessMessage(`✅ Successfully created ${slotsToCreate.length} weekly slots!`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+      fetchSlots();
+    } catch (err) {
+      setError('Failed to create slots: ' + (err.response?.data?.message || err.response?.data || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Get available time slots helper function
+  const getAvailableTimeSlots = (date) => {
+    const dayOfWeek = date.getDay();
+    
+    if (dayOfWeek === 0) {
+      return [
+        { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
+        { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
+        { start: '21:00', end: '22:00', display: '9:00 PM – 10:00 PM' },
+        { start: '22:00', end: '23:00', display: '10:00 PM – 11:00 PM' }
+      ];
+    }
+    
+    if (dayOfWeek === 6) {
+      return [
+        { start: '09:00', end: '10:00', display: '9:00 AM – 10:00 AM' },
+        { start: '10:00', end: '11:00', display: '10:00 AM – 11:00 AM' }
+      ];
+    }
+    
+    return [
+      { start: '15:00', end: '16:00', display: '3:00 PM – 4:00 PM' },
+      { start: '16:00', end: '17:00', display: '4:00 PM – 5:00 PM' },
+      { start: '17:00', end: '18:00', display: '5:00 PM – 6:00 PM' },
+      { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
+      { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
+      { start: '20:00', end: '21:00', display: '8:00 PM – 9:00 PM' }
+    ];
+  };
+
   // Helper functions for date calculations
   const getWeekDates = (date) => {
     const week = [];
@@ -148,39 +222,6 @@ function CalendarSlotView({ userId, userRole }) {
     const weekDates = getWeekDates(currentWeek);
     const today = new Date();
 
-    // Define available time slots based on schedule
-    const getAvailableTimeSlots = (date) => {
-      const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-      
-      // Sunday: 4 slots only at 6 PM, 7 PM, 9 PM, 10 PM
-      if (dayOfWeek === 0) {
-        return [
-          { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
-          { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
-          { start: '21:00', end: '22:00', display: '9:00 PM – 10:00 PM' },
-          { start: '22:00', end: '23:00', display: '10:00 PM – 11:00 PM' }
-        ];
-      }
-      
-      // Saturday: 2 morning slots only
-      if (dayOfWeek === 6) {
-        return [
-          { start: '09:00', end: '10:00', display: '9:00 AM – 10:00 AM' },
-          { start: '10:00', end: '11:00', display: '10:00 AM – 11:00 AM' }
-        ];
-      }
-      
-      // Monday to Friday: 6 slots from 3 PM to 9 PM
-      return [
-        { start: '15:00', end: '16:00', display: '3:00 PM – 4:00 PM' },
-        { start: '16:00', end: '17:00', display: '4:00 PM – 5:00 PM' },
-        { start: '17:00', end: '18:00', display: '5:00 PM – 6:00 PM' },
-        { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
-        { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
-        { start: '20:00', end: '21:00', display: '8:00 PM – 9:00 PM' }
-      ];
-    };
-
     // Build available slots for the week
     const weeklyAvailableSlots = weekDates.map(date => {
       const daySlots = getAvailableTimeSlots(date);
@@ -215,13 +256,26 @@ function CalendarSlotView({ userId, userRole }) {
           <h3 className="week-range">
             📅 Weekly Schedule
           </h3>
-          <p className="recurring-note">Select your preferred weekly time slot</p>
+          <p className="recurring-note">{userRole === 'TEACHER' ? 'Manage your weekly availability' : 'Select your preferred weekly time slot'}</p>
         </div>
 
         <div className="availability-info">
-          <p><strong>🔄 Regular Weekly Appointments</strong></p>
-          <p>Book once, and this time slot will be yours every week!</p>
-          <p><strong>Schedule:</strong> Sun: 6-7 PM, 9-10 PM (4 slots) | Mon-Fri: 3-9 PM (6 slots) | Sat: 9-11 AM (2 slots)</p>
+          {userRole === 'TEACHER' ? (
+            <>
+              <p><strong>👨‍🏫 Teacher Slot Management</strong></p>
+              <p>Create all your weekly time slots at once with the button below</p>
+              <p><strong>Schedule:</strong> Sun: 6-7 PM, 9-10 PM (4 slots) | Mon-Fri: 3-9 PM (6 slots) | Sat: 9-11 AM (2 slots)</p>
+              <button className="create-weekly-slots-btn" onClick={handleCreateWeeklySlots} disabled={loading}>
+                {loading ? '⏳ Creating Slots...' : '➕ Create All Weekly Slots'}
+              </button>
+            </>
+          ) : (
+            <>
+              <p><strong>🔄 Regular Weekly Appointments</strong></p>
+              <p>Book once, and this time slot will be yours every week!</p>
+              <p><strong>Schedule:</strong> Sun: 6-7 PM, 9-10 PM (4 slots) | Mon-Fri: 3-9 PM (6 slots) | Sat: 9-11 AM (2 slots)</p>
+            </>
+          )}
         </div>
         
         <div className="slots-list-container">
@@ -481,6 +535,31 @@ function CalendarSlotView({ userId, userRole }) {
         .availability-info strong {
           color: #fff;
           font-size: 16px;
+        }
+
+        .create-weekly-slots-btn {
+          margin-top: 15px;
+          padding: 12px 30px;
+          background: white;
+          color: #667eea;
+          border: 2px solid white;
+          border-radius: 10px;
+          font-size: 16px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .create-weekly-slots-btn:hover:not(:disabled) {
+          background: #f0f7ff;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .create-weekly-slots-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
 
         /* Slots List Container */
