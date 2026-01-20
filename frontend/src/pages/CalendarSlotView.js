@@ -139,11 +139,61 @@ function CalendarSlotView({ userId, userRole }) {
     return statusColors[slot.status] || statusColors['AVAILABLE'];
   };
 
-  // Week View Component - Table Style
+  // Week View Component - Simple Available Slots Table
   const WeekView = () => {
     const weekDates = getWeekDates(currentWeek);
-    const timeSlots = getTimeSlots();
     const today = new Date();
+
+    // Define available time slots based on schedule
+    const getAvailableTimeSlots = (date) => {
+      const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+      
+      // Saturday: 2 morning slots only
+      if (dayOfWeek === 6) {
+        return [
+          { start: '09:00', end: '10:00', display: '9:00 AM - 10:00 AM' },
+          { start: '10:00', end: '11:00', display: '10:00 AM - 11:00 AM' }
+        ];
+      }
+      
+      // Sunday to Friday: 5 slots from 3 PM to 9 PM
+      return [
+        { start: '15:00', end: '16:00', display: '3:00 PM - 4:00 PM' },
+        { start: '16:00', end: '17:00', display: '4:00 PM - 5:00 PM' },
+        { start: '17:00', end: '18:00', display: '5:00 PM - 6:00 PM' },
+        { start: '18:00', end: '19:00', display: '6:00 PM - 7:00 PM' },
+        { start: '19:00', end: '20:00', display: '7:00 PM - 8:00 PM' },
+        { start: '20:00', end: '21:00', display: '8:00 PM - 9:00 PM' }
+      ];
+    };
+
+    // Build available slots for the week
+    const weeklyAvailableSlots = weekDates.map(date => {
+      const daySlots = getAvailableTimeSlots(date);
+      const existingSlots = getSlotsForDate(date);
+      
+      return {
+        date,
+        dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
+        shortDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        isToday: isSameDay(date, today),
+        slots: daySlots.map(timeSlot => {
+          // Find matching slot from database
+          const matchedSlot = existingSlots.find(slot => {
+            const slotStart = new Date(slot.startTime);
+            const slotHour = slotStart.getHours().toString().padStart(2, '0');
+            const slotMinute = slotStart.getMinutes().toString().padStart(2, '0');
+            return `${slotHour}:${slotMinute}` === timeSlot.start;
+          });
+          
+          return {
+            ...timeSlot,
+            slot: matchedSlot,
+            status: matchedSlot ? matchedSlot.status : 'UNAVAILABLE'
+          };
+        })
+      };
+    });
 
     return (
       <div className="calendar-week-view">
@@ -159,91 +209,85 @@ function CalendarSlotView({ userId, userRole }) {
             Next Week →
           </button>
         </div>
+
+        <div className="availability-info">
+          <p><strong>📅 Teacher's Weekly Schedule:</strong></p>
+          <p>Sunday - Friday: 3:00 PM - 9:00 PM (6 slots per day)</p>
+          <p>Saturday: 9:00 AM - 11:00 AM (2 morning slots)</p>
+        </div>
         
-        <div className="weekly-table-wrapper">
-          <table className="weekly-appointments-table">
+        <div className="available-slots-table-wrapper">
+          <table className="available-slots-table">
             <thead>
               <tr>
-                <th className="time-column-header">Time</th>
-                {weekDates.map((date) => {
-                  const isToday = isSameDay(date, today);
-                  return (
-                    <th key={date.toISOString()} className={`day-column-header ${isToday ? 'today' : ''}`}>
-                      <div className="day-header-content">
-                        <div className="day-name">{date.toLocaleDateString('en-US', { weekday: 'long' })}</div>
-                        <div className="day-date">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                        {isToday && <span className="today-badge">Today</span>}
-                      </div>
-                    </th>
-                  );
-                })}
+                <th className="day-header-cell">Day</th>
+                <th className="slots-header-cell">Available Time Slots</th>
               </tr>
             </thead>
             <tbody>
-              {timeSlots.map(({ hour, minute }) => (
-                <tr key={`${hour}-${minute}`} className="time-row">
-                  <td className="time-cell">
-                    <span className="time-label">{formatTimeSimple(hour, minute)}</span>
+              {weeklyAvailableSlots.map((day) => (
+                <tr key={day.date.toISOString()} className={`day-row ${day.isToday ? 'today-row' : ''}`}>
+                  <td className="day-cell">
+                    <div className="day-info">
+                      <div className="day-name-large">{day.dayName}</div>
+                      <div className="day-date-large">{day.shortDate}</div>
+                      {day.isToday && <span className="today-badge-large">Today</span>}
+                    </div>
                   </td>
-                  {weekDates.map((date) => {
-                    const slot = findSlotAtTime(date, hour, minute);
-                    const isPastTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute) < new Date();
-                    
-                    return (
-                      <td 
-                        key={`${hour}-${minute}-${date.toISOString()}`} 
-                        className={`slot-cell ${isPastTime ? 'past-time' : ''} ${slot ? 'has-slot' : ''}`}
-                      >
-                        {slot ? (
-                          <div 
-                            className={`appointment-slot ${slot.status.toLowerCase()} ${userRole === 'STUDENT' && slot.status === 'AVAILABLE' ? 'clickable' : ''}`}
-                            style={{
-                              backgroundColor: getSlotStatus(slot)?.bg,
-                              borderLeftColor: getSlotStatus(slot)?.border,
-                            }}
-                            onClick={() => userRole === 'STUDENT' && slot.status === 'AVAILABLE' && handleBookSlot(slot.id)}
+                  <td className="slots-cell">
+                    <div className="slots-grid">
+                      {day.slots.map((timeSlot, index) => {
+                        const slot = timeSlot.slot;
+                        const isAvailable = slot && slot.status === 'AVAILABLE';
+                        const isBooked = slot && slot.status === 'BOOKED';
+                        const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
+                        
+                        return (
+                          <div
+                            key={index}
+                            className={`time-slot-card ${isAvailable ? 'available' : ''} ${isBooked ? 'booked' : ''} ${isUnavailable ? 'unavailable' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable' : ''}`}
+                            onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id)}
                           >
-                            <div className="slot-content">
-                              <div className="slot-time-range">
-                                {formatTime(new Date(slot.startTime))} - {formatTime(new Date(slot.endTime))}
-                              </div>
-                              {slot.teacher && (
-                                <div className="slot-teacher">👨‍🏫 {slot.teacher.username}</div>
-                              )}
-                              <div className={`slot-status-badge ${slot.status.toLowerCase()}`}>
-                                {slot.status === 'AVAILABLE' && '✓ Available'}
-                                {slot.status === 'BOOKED' && '📅 Booked'}
-                                {slot.status === 'CANCELLED' && '✗ Cancelled'}
-                              </div>
-                              {userRole === 'STUDENT' && slot.status === 'AVAILABLE' && (
-                                <button className="book-button">Book Now</button>
-                              )}
+                            <div className="slot-time">{timeSlot.display}</div>
+                            {slot && slot.teacher && (
+                              <div className="slot-teacher-name">👨‍🏫 {slot.teacher.username}</div>
+                            )}
+                            <div className="slot-status-indicator">
+                              {isAvailable && <span className="status-badge available-badge">✓ Available</span>}
+                              {isBooked && <span className="status-badge booked-badge">📅 Booked</span>}
+                              {isUnavailable && <span className="status-badge unavailable-badge">— Not Open</span>}
                             </div>
+                            {userRole === 'STUDENT' && isAvailable && (
+                              <button className="quick-book-btn" onClick={(e) => {
+                                e.stopPropagation();
+                                handleBookSlot(slot.id);
+                              }}>
+                                Book Now
+                              </button>
+                            )}
                           </div>
-                        ) : (
-                          <div className="empty-slot"></div>
-                        )}
-                      </td>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        <div className="legend">
+        <div className="legend-simple">
           <div className="legend-item">
-            <span className="legend-color available"></span>
-            <span>Available</span>
+            <span className="legend-dot available"></span>
+            <span>Available to Book</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color booked"></span>
-            <span>Booked</span>
+            <span className="legend-dot booked"></span>
+            <span>Already Booked</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color cancelled"></span>
-            <span>Cancelled</span>
+            <span className="legend-dot unavailable"></span>
+            <span>Not Available Yet</span>
           </div>
         </div>
       </div>
@@ -395,7 +439,7 @@ function CalendarSlotView({ userId, userRole }) {
           transform: translateX(-3px);
         }
 
-        /* Week View Table Styles */
+        /* Week View - Available Slots Table */
         .calendar-week-view {
           background: white;
           border-radius: 16px;
@@ -438,228 +482,226 @@ function CalendarSlotView({ userId, userRole }) {
           box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
         }
 
-        .weekly-table-wrapper {
-          overflow-x: auto;
-          padding: 20px;
+        .availability-info {
+          padding: 20px 32px;
+          background: #f0f7ff;
+          border-bottom: 2px solid #d0e7ff;
+          text-align: center;
         }
 
-        .weekly-appointments-table {
+        .availability-info p {
+          margin: 5px 0;
+          color: #2c3e50;
+          font-size: 14px;
+        }
+
+        .availability-info strong {
+          color: #667eea;
+          font-size: 16px;
+        }
+
+        .available-slots-table-wrapper {
+          padding: 24px;
+          overflow-x: auto;
+        }
+
+        .available-slots-table {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
-          font-size: 13px;
         }
 
-        .weekly-appointments-table thead {
-          position: sticky;
-          top: 0;
-          z-index: 10;
-        }
-
-        .time-column-header {
-          width: 100px;
+        .day-header-cell {
+          width: 180px;
           background: #2c3e50;
           color: white;
-          padding: 16px 12px;
+          padding: 16px;
           font-weight: 700;
-          text-align: center;
+          font-size: 15px;
+          text-align: left;
           border-top-left-radius: 12px;
         }
 
-        .day-column-header {
-          min-width: 140px;
-          background: #667eea;
+        .slots-header-cell {
+          background: #2c3e50;
           color: white;
-          padding: 12px 8px;
-          text-align: center;
-          font-weight: 600;
-          position: relative;
-        }
-
-        .day-column-header.today {
-          background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-          box-shadow: 0 4px 12px rgba(240, 147, 251, 0.4);
-        }
-
-        .day-column-header:last-child {
+          padding: 16px;
+          font-weight: 700;
+          font-size: 15px;
+          text-align: left;
           border-top-right-radius: 12px;
         }
 
-        .day-header-content {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
+        .day-row {
+          border-bottom: 2px solid #e9ecef;
+          transition: background 0.2s ease;
         }
 
-        .day-name {
+        .day-row:hover {
+          background: #f8f9fa;
+        }
+
+        .day-row.today-row {
+          background: #fff8f0;
+        }
+
+        .day-row.today-row:hover {
+          background: #fff3e6;
+        }
+
+        .day-cell {
+          padding: 24px;
+          vertical-align: top;
+          border-right: 2px solid #e9ecef;
+        }
+
+        .day-info {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .day-name-large {
+          font-size: 18px;
+          font-weight: 700;
+          color: #2c3e50;
+        }
+
+        .day-date-large {
           font-size: 14px;
+          color: #6c757d;
+          font-weight: 500;
+        }
+
+        .today-badge-large {
+          display: inline-block;
+          background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+          color: white;
+          padding: 4px 12px;
+          border-radius: 16px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          box-shadow: 0 2px 8px rgba(240, 147, 251, 0.4);
+          width: fit-content;
+        }
+
+        .slots-cell {
+          padding: 16px;
+        }
+
+        .slots-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+          gap: 12px;
+        }
+
+        .time-slot-card {
+          background: #f8f9fa;
+          border: 2px solid #dee2e6;
+          border-radius: 10px;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          transition: all 0.3s ease;
+          min-height: 120px;
+        }
+
+        .time-slot-card.available {
+          background: #d4edda;
+          border-color: #28a745;
+          border-left: 5px solid #28a745;
+        }
+
+        .time-slot-card.booked {
+          background: #fff3cd;
+          border-color: #ffc107;
+          border-left: 5px solid #ffc107;
+        }
+
+        .time-slot-card.unavailable {
+          background: #f8f9fa;
+          border-color: #dee2e6;
+          opacity: 0.6;
+        }
+
+        .time-slot-card.clickable {
+          cursor: pointer;
+        }
+
+        .time-slot-card.clickable:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 24px rgba(40, 167, 69, 0.3);
+        }
+
+        .slot-time {
+          font-size: 15px;
+          font-weight: 700;
+          color: #2c3e50;
+          text-align: center;
+        }
+
+        .slot-teacher-name {
+          font-size: 12px;
+          color: #495057;
+          text-align: center;
+        }
+
+        .slot-status-indicator {
+          display: flex;
+          justify-content: center;
+          margin-top: auto;
+        }
+
+        .status-badge {
+          padding: 6px 12px;
+          border-radius: 16px;
+          font-size: 11px;
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
-        .day-date {
-          font-size: 12px;
-          opacity: 0.9;
-        }
-
-        .today-badge {
-          position: absolute;
-          top: -8px;
-          right: -8px;
-          background: #ff4757;
-          color: white;
-          padding: 4px 8px;
-          border-radius: 12px;
-          font-size: 10px;
-          font-weight: 700;
-          box-shadow: 0 2px 8px rgba(255, 71, 87, 0.4);
-        }
-
-        .time-row {
-          border-bottom: 1px solid #e9ecef;
-        }
-
-        .time-row:hover {
-          background: #f8f9fa;
-        }
-
-        .time-cell {
-          background: #f8f9fa;
-          padding: 16px 12px;
-          text-align: center;
-          border-right: 2px solid #dee2e6;
-          font-weight: 600;
-          color: #6c757d;
-        }
-
-        .time-label {
-          font-size: 13px;
-        }
-
-        .slot-cell {
-          padding: 8px;
-          vertical-align: top;
-          border-right: 1px solid #e9ecef;
-          min-height: 80px;
-          position: relative;
-        }
-
-        .slot-cell.past-time {
-          background: #fafafa;
-          opacity: 0.7;
-        }
-
-        .slot-cell.has-slot {
-          background: #fff;
-        }
-
-        .empty-slot {
-          height: 100%;
-          min-height: 60px;
-        }
-
-        .appointment-slot {
-          border-left: 4px solid;
-          border-radius: 8px;
-          padding: 12px;
-          height: 100%;
-          transition: all 0.3s ease;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .appointment-slot.clickable {
-          cursor: pointer;
-        }
-
-        .appointment-slot.clickable:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-        }
-
-        .appointment-slot.available {
-          background: #d4edda;
-          border-left-color: #28a745;
-        }
-
-        .appointment-slot.booked {
-          background: #fff3cd;
-          border-left-color: #ffc107;
-        }
-
-        .appointment-slot.cancelled {
-          background: #f8d7da;
-          border-left-color: #dc3545;
-        }
-
-        .slot-content {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .slot-time-range {
-          font-size: 12px;
-          font-weight: 700;
-          color: #2c3e50;
-        }
-
-        .slot-teacher {
-          font-size: 11px;
-          color: #495057;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .slot-status-badge {
-          display: inline-block;
-          padding: 3px 8px;
-          border-radius: 12px;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-        }
-
-        .slot-status-badge.available {
+        .available-badge {
           background: #28a745;
           color: white;
         }
 
-        .slot-status-badge.booked {
+        .booked-badge {
           background: #ffc107;
           color: #856404;
         }
 
-        .slot-status-badge.cancelled {
-          background: #dc3545;
+        .unavailable-badge {
+          background: #6c757d;
           color: white;
         }
 
-        .book-button {
-          margin-top: 6px;
-          padding: 6px 12px;
+        .quick-book-btn {
+          margin-top: 8px;
+          padding: 8px 16px;
           background: #667eea;
           color: white;
           border: none;
-          border-radius: 6px;
-          font-size: 11px;
+          border-radius: 8px;
+          font-size: 13px;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
+          width: 100%;
         }
 
-        .book-button:hover {
+        .quick-book-btn:hover {
           background: #5568d3;
           transform: scale(1.05);
         }
 
-        .legend {
+        .legend-simple {
           display: flex;
           justify-content: center;
-          gap: 24px;
-          padding: 20px;
+          gap: 32px;
+          padding: 24px;
           background: #f8f9fa;
           border-top: 2px solid #e9ecef;
         }
@@ -667,32 +709,28 @@ function CalendarSlotView({ userId, userRole }) {
         .legend-item {
           display: flex;
           align-items: center;
-          gap: 8px;
-          font-size: 13px;
+          gap: 10px;
+          font-size: 14px;
           font-weight: 600;
           color: #495057;
         }
 
-        .legend-color {
-          width: 20px;
-          height: 20px;
-          border-radius: 4px;
-          border: 2px solid;
+        .legend-dot {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
         }
 
-        .legend-color.available {
-          background: #d4edda;
-          border-color: #28a745;
+        .legend-dot.available {
+          background: #28a745;
         }
 
-        .legend-color.booked {
-          background: #fff3cd;
-          border-color: #ffc107;
+        .legend-dot.booked {
+          background: #ffc107;
         }
 
-        .legend-color.cancelled {
-          background: #f8d7da;
-          border-color: #dc3545;
+        .legend-dot.unavailable {
+          background: #6c757d;
         }
 
         /* Day View Styles */
@@ -869,6 +907,38 @@ function CalendarSlotView({ userId, userRole }) {
           .view-controls {
             width: 100%;
             justify-content: center;
+          }
+
+          .week-navigation {
+            flex-direction: column;
+            gap: 15px;
+            padding: 20px 15px;
+          }
+
+          .week-range {
+            font-size: 16px;
+            text-align: center;
+          }
+
+          .nav-btn {
+            width: 100%;
+          }
+
+          .availability-info p {
+            font-size: 12px;
+          }
+
+          .day-cell {
+            padding: 16px;
+          }
+
+          .slots-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .legend-simple {
+            flex-direction: column;
+            gap: 12px;
           }
         }
       `}</style>
