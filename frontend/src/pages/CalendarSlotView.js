@@ -152,6 +152,16 @@ function CalendarSlotView({ userId, userRole }) {
     const getAvailableTimeSlots = (date) => {
       const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
       
+      // Sunday: 4 slots only at 6 PM, 7 PM, 9 PM, 10 PM
+      if (dayOfWeek === 0) {
+        return [
+          { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
+          { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
+          { start: '21:00', end: '22:00', display: '9:00 PM – 10:00 PM' },
+          { start: '22:00', end: '23:00', display: '10:00 PM – 11:00 PM' }
+        ];
+      }
+      
       // Saturday: 2 morning slots only
       if (dayOfWeek === 6) {
         return [
@@ -160,7 +170,7 @@ function CalendarSlotView({ userId, userRole }) {
         ];
       }
       
-      // Sunday to Friday: 6 slots from 3 PM to 9 PM
+      // Monday to Friday: 6 slots from 3 PM to 9 PM
       return [
         { start: '15:00', end: '16:00', display: '3:00 PM – 4:00 PM' },
         { start: '16:00', end: '17:00', display: '4:00 PM – 5:00 PM' },
@@ -211,7 +221,7 @@ function CalendarSlotView({ userId, userRole }) {
         <div className="availability-info">
           <p><strong>🔄 Regular Weekly Appointments</strong></p>
           <p>Book once, and this time slot will be yours every week!</p>
-          <p><strong>Schedule:</strong> Sun-Fri: 3 PM - 9 PM (6 slots) | Sat: 9 AM - 11 AM (2 slots)</p>
+          <p><strong>Schedule:</strong> Sun: 6-7 PM, 9-10 PM (4 slots) | Mon-Fri: 3-9 PM (6 slots) | Sat: 9-11 AM (2 slots)</p>
         </div>
         
         <div className="slots-list-container">
