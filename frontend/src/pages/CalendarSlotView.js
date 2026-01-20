@@ -12,6 +12,9 @@ function CalendarSlotView({ userId, userRole }) {
   const [bookingSlotId, setBookingSlotId] = useState(null);
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'day'
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [editingSlot, setEditingSlot] = useState(null);
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
   const navigate = useNavigate();
 
   const fetchSlots = useCallback(async () => {
@@ -49,6 +52,53 @@ function CalendarSlotView({ userId, userRole }) {
     } finally {
       setBookingSlotId(null);
     }
+  };
+
+  const handleEditSlot = (slot) => {
+    const startDate = new Date(slot.startTime);
+    const endDate = new Date(slot.endTime);
+    setEditingSlot(slot);
+    setEditStartTime(formatDateTimeLocal(startDate));
+    setEditEndTime(formatDateTimeLocal(endDate));
+  };
+
+  const handleUpdateSlot = async () => {
+    if (!editingSlot) return;
+    
+    try {
+      const startISO = new Date(editStartTime).toISOString();
+      const endISO = new Date(editEndTime).toISOString();
+      
+      await api.put(`/slots/${editingSlot.id}?startTime=${startISO}&endTime=${endISO}`);
+      setSuccessMessage('✅ Slot updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setEditingSlot(null);
+      fetchSlots();
+    } catch (err) {
+      setError('Failed to update slot: ' + (err.response?.data || err.message));
+    }
+  };
+
+  const handleDeleteSlot = async (slotId) => {
+    if (!window.confirm('Delete this time slot? Students will no longer see it.')) return;
+    
+    try {
+      await api.delete(`/slots/${slotId}`);
+      setSuccessMessage('✅ Slot deleted successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      fetchSlots();
+    } catch (err) {
+      setError('Failed to delete slot: ' + (err.response?.data || err.message));
+    }
+  };
+
+  const formatDateTimeLocal = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   const handleCreateWeeklySlots = async () => {
@@ -309,6 +359,23 @@ function CalendarSlotView({ userId, userRole }) {
                             Book
                           </button>
                         )}
+                        
+                        {userRole === 'TEACHER' && slot && (
+                          <div className="teacher-slot-actions">
+                            <button className="edit-btn-inline" onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditSlot(slot);
+                            }}>
+                              ✏️ Edit
+                            </button>
+                            <button className="delete-btn-inline" onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSlot(slot.id);
+                            }}>
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        )}
                       </li>
                     );
                   })
@@ -469,6 +536,36 @@ function CalendarSlotView({ userId, userRole }) {
 
       {successMessage && <div className="success">{successMessage}</div>}
       {error && <div className="error">{error}</div>}
+
+      {editingSlot && (
+        <div className="modal-overlay" onClick={() => setEditingSlot(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Time Slot</h3>
+            <div className="form-group">
+              <label>Start Time:</label>
+              <input 
+                type="datetime-local" 
+                value={editStartTime}
+                onChange={(e) => setEditStartTime(e.target.value)}
+                className="form-control"
+              />
+            </div>
+            <div className="form-group">
+              <label>End Time:</label>
+              <input 
+                type="datetime-local" 
+                value={editEndTime}
+                onChange={(e) => setEditEndTime(e.target.value)}
+                className="form-control"
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-save" onClick={handleUpdateSlot}>Save Changes</button>
+              <button className="btn-cancel" onClick={() => setEditingSlot(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="loading">
