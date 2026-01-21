@@ -1,4 +1,6 @@
+/* eslint-env browser */
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -34,7 +36,7 @@ function MyBookings({ userId }) {
   };
 
   const handleCancelBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to cancel this booking?')) {
+    if (!globalThis.confirm('Are you sure you want to cancel this booking?')) {
       return;
     }
 
@@ -98,15 +100,16 @@ function MyBookings({ userId }) {
 
       {loading ? (
         <div className="loading">Loading bookings...</div>
-      ) : bookings.length === 0 ? (
-        <div className="info" style={{ marginTop: '20px' }}>
-          <p>📭 You don't have any bookings yet.</p>
-          <button 
-            onClick={() => navigate('/available-slots')}
-            style={{
-              marginTop: '15px',
-              padding: '10px 20px',
-              background: '#667eea',
+      ) : (
+        bookings.length === 0 ? (
+          <div className="info" style={{ marginTop: '20px' }}>
+            <p>📭 You don't have any bookings yet.</p>
+            <button 
+              onClick={() => navigate('/available-slots')}
+              style={{
+                marginTop: '15px',
+                padding: '10px 20px',
+                background: '#667eea',
               color: 'white',
               border: 'none',
               borderRadius: '5px',
@@ -161,8 +164,11 @@ function MyBookings({ userId }) {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  background: ['CANCELLED', 'REJECTED'].includes(booking.status) ? '#ccc' : 
-                             booking.status === 'PENDING' ? '#ffc107' : '#dc3545',
+                  background: (() => {
+                    if (['CANCELLED', 'REJECTED'].includes(booking.status)) return '#ccc';
+                    if (booking.status === 'PENDING') return '#ffc107';
+                    return '#dc3545';
+                  })(),
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',
@@ -171,17 +177,25 @@ function MyBookings({ userId }) {
                   fontWeight: 'bold',
                 }}
               >
-                {cancellingId === booking.id ? 'Cancelling...' : 
-                 booking.status === 'CANCELLED' ? 'Cancelled' :
-                 booking.status === 'REJECTED' ? 'Rejected by Teacher' :
-                 booking.status === 'PENDING' ? 'Cancel Request' : 'Cancel Booking'}
+                {(() => {
+                  if (cancellingId === booking.id) return 'Cancelling...';
+                  if (booking.status === 'CANCELLED') return 'Cancelled';
+                  if (booking.status === 'REJECTED') return 'Rejected by Teacher';
+                  if (booking.status === 'PENDING') return 'Cancel Request';
+                  return 'Cancel Booking';
+                })()}
               </button>
             </div>
           ))}
         </div>
+        )
       )}
     </div>
   );
 }
+
+MyBookings.propTypes = {
+  userId: PropTypes.string.isRequired
+};
 
 export default MyBookings;

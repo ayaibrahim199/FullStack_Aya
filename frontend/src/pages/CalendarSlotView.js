@@ -1,3 +1,4 @@
+/* eslint-env browser */
 import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
@@ -39,7 +40,7 @@ function CalendarSlotView({ userId, userRole }) {
     if (userRole !== 'STUDENT') return;
     
     const confirmMessage = `Book ${dayName} at ${timeDisplay} for ALL upcoming weeks?\n\nThis will be your regular weekly appointment.`;
-    if (!window.confirm(confirmMessage)) return;
+    if (!globalThis.confirm(confirmMessage)) return;
     
     try {
       setBookingSlotId(slotId);
@@ -80,7 +81,7 @@ function CalendarSlotView({ userId, userRole }) {
   };
 
   const handleDeleteSlot = async (slotId) => {
-    if (!window.confirm('Delete this time slot? Students will no longer see it.')) return;
+    if (!globalThis.confirm('Delete this time slot? Students will no longer see it.')) return;
     
     try {
       await api.delete(`/slots/${slotId}`);
@@ -105,7 +106,7 @@ function CalendarSlotView({ userId, userRole }) {
     if (userRole !== 'TEACHER') return;
     
     const confirmMessage = 'Create ALL weekly slots based on your schedule?\n\nThis will create slots for:\n• Sunday: 6 PM, 7 PM, 9 PM, 10 PM\n• Monday-Friday: 3 PM - 9 PM (6 slots each day)\n• Saturday: 9 AM - 11 AM';
-    if (!window.confirm(confirmMessage)) return;
+    if (!globalThis.confirm(confirmMessage)) return;
     
     try {
       setLoading(true);
@@ -117,11 +118,11 @@ function CalendarSlotView({ userId, userRole }) {
         slots.forEach(slot => {
           const startDateTime = new Date(date);
           const [startHour, startMinute] = slot.start.split(':');
-          startDateTime.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+          startDateTime.setHours(Number.parseInt(startHour, 10), Number.parseInt(startMinute, 10), 0, 0);
           
           const endDateTime = new Date(date);
           const [endHour, endMinute] = slot.end.split(':');
-          endDateTime.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
+          endDateTime.setHours(Number.parseInt(endHour, 10), Number.parseInt(endMinute, 10), 0, 0);
           
           slotsToCreate.push({
             startTime: startDateTime.toISOString(),
@@ -268,8 +269,23 @@ function CalendarSlotView({ userId, userRole }) {
           const endHour = slotEnd.getHours();
           const startPeriod = startHour >= 12 ? 'PM' : 'AM';
           const endPeriod = endHour >= 12 ? 'PM' : 'AM';
-          const displayStartHour = startHour > 12 ? startHour - 12 : (startHour === 0 ? 12 : startHour);
-          const displayEndHour = endHour > 12 ? endHour - 12 : (endHour === 0 ? 12 : endHour);
+          let displayStartHour;
+          if (startHour > 12) {
+            displayStartHour = startHour - 12;
+          } else if (startHour === 0) {
+            displayStartHour = 12;
+          } else {
+            displayStartHour = startHour;
+          }
+          
+          let displayEndHour;
+          if (endHour > 12) {
+            displayEndHour = endHour - 12;
+          } else if (endHour === 0) {
+            displayEndHour = 12;
+          } else {
+            displayEndHour = endHour;
+          }
           
           return {
             start: `${slotStart.getHours().toString().padStart(2, '0')}:${slotStart.getMinutes().toString().padStart(2, '0')}`,
@@ -334,48 +350,37 @@ function CalendarSlotView({ userId, userRole }) {
                 ) : (
                   day.slots.map((timeSlot, index) => {
                     const slot = timeSlot.slot;
-                    const isAvailable = slot && slot.status === 'AVAILABLE';
-                    const isBooked = slot && slot.status === 'BOOKED';
+                    const isAvailable = slot?.status === 'AVAILABLE';
+                    const isBooked = slot?.status === 'BOOKED';
                     const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
                     
                     return (
-                      <li
-                        key={index}
-                        className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''} ${userRole === 'STUDENT' && isAvailable ? 'clickable-slot' : ''}`}
-                        onClick={() => userRole === 'STUDENT' && isAvailable && handleBookSlot(slot.id, day.dayName, timeSlot.display)}
-                      >
-                        <span className="slot-time-text">{timeSlot.display}</span>
-                        <span className="slot-date-text">({day.fullDate})</span>
-                        
-                        {isAvailable && <span className="status-tag available-tag">✓ Available</span>}
-                        {isBooked && <span className="status-tag booked-tag">Booked</span>}
-                        {isUnavailable && <span className="status-tag unavailable-tag">Not Open</span>}
-                        
-                        {userRole === 'STUDENT' && isAvailable && (
-                          <button className="book-btn-inline" onClick={(e) => {
-                            e.stopPropagation();
-                            handleBookSlot(slot.id, day.dayName, timeSlot.display);
-                          }}>
-                            Book
-                          </button>
-                        )}
-                        
-                        {userRole === 'TEACHER' && slot && (
-                          <div className="teacher-slot-actions">
-                            <button className="edit-btn-inline" onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditSlot(slot);
-                            }}>
-                              ✏️ Edit
+                      <li key={`${day.dayName}-${index}`} className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''}`}>
+                        <div className="slot-item-content">
+                          <span className="slot-time-text">{timeSlot.display}</span>
+                          <span className="slot-date-text">({day.fullDate})</span>
+                          
+                          {isAvailable && <span className="status-tag available-tag">✓ Available</span>}
+                          {isBooked && <span className="status-tag booked-tag">Booked</span>}
+                          {isUnavailable && <span className="status-tag unavailable-tag">Not Open</span>}
+                          
+                          {userRole === 'STUDENT' && isAvailable && (
+                            <button className="book-btn-inline" onClick={() => handleBookSlot(slot.id, day.dayName, timeSlot.display)}>
+                              Book
                             </button>
-                            <button className="delete-btn-inline" onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteSlot(slot.id);
-                            }}>
-                              🗑️ Delete
-                            </button>
-                          </div>
-                        )}
+                          )}
+                          
+                          {userRole === 'TEACHER' && slot && (
+                            <div className="teacher-slot-actions">
+                              <button className="edit-btn-inline" onClick={() => handleEditSlot(slot)}>
+                                ✏️ Edit
+                              </button>
+                              <button className="delete-btn-inline" onClick={() => handleDeleteSlot(slot.id)}>
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </li>
                     );
                   })
@@ -538,12 +543,24 @@ function CalendarSlotView({ userId, userRole }) {
       {error && <div className="error">{error}</div>}
 
       {editingSlot && (
-        <div className="modal-overlay" onClick={() => setEditingSlot(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className="modal-overlay" 
+          onClick={() => setEditingSlot(null)}
+          onKeyDown={(e) => e.key === 'Escape' && setEditingSlot(null)}
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
+        >
+          <div 
+            className="modal-content" 
+            onClick={(e) => e.stopPropagation()}
+            role="document"
+          >
             <h3>Edit Time Slot</h3>
             <div className="form-group">
-              <label>Start Time:</label>
+              <label htmlFor="edit-start-time">Start Time:</label>
               <input 
+                id="edit-start-time"
                 type="datetime-local" 
                 value={editStartTime}
                 onChange={(e) => setEditStartTime(e.target.value)}
@@ -551,8 +568,9 @@ function CalendarSlotView({ userId, userRole }) {
               />
             </div>
             <div className="form-group">
-              <label>End Time:</label>
+              <label htmlFor="edit-end-time">End Time:</label>
               <input 
+                id="edit-end-time"
                 type="datetime-local" 
                 value={editEndTime}
                 onChange={(e) => setEditEndTime(e.target.value)}

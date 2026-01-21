@@ -212,6 +212,13 @@
   padding-left: 40px;
 }
 
+.slot-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
 .slot-item::before {
   content: "•";
   position: absolute;

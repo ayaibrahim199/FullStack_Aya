@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 
 function TeacherDashboard({ userId, userName }) {
@@ -15,5 +16,10 @@ function TeacherDashboard({ userId, userName }) {
     </div>
   );
 }
+
+TeacherDashboard.propTypes = {
+  userId: PropTypes.string.isRequired,
+  userName: PropTypes.string.isRequired
+};
 
 export default TeacherDashboard;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -414,8 +415,11 @@ function StudentStatistics({ userId }) {
               <strong style={{ color: 'var(--text-primary)' }}>Preferred Time:</strong>
               <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span>
-                  {stats.preferredTimeSlot?.time === 'morning' ? '🌅' : 
-                   stats.preferredTimeSlot?.time === 'afternoon' ? '☀️' : '🌙'}
+                  {(() => {
+                     if (stats.preferredTimeSlot?.time === 'morning') return '🌅';
+                     if (stats.preferredTimeSlot?.time === 'afternoon') return '☀️';
+                     return '🌙';
+                   })()}
                 </span>
                 <span style={{ textTransform: 'capitalize' }}>
                   {stats.preferredTimeSlot?.time}
@@ -572,5 +576,9 @@ function StudentStatistics({ userId }) {
     </div>
   );
 }
+
+StudentStatistics.propTypes = {
+  userId: PropTypes.string.isRequired
+};
 
 export default StudentStatistics;
