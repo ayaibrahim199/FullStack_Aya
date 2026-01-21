@@ -40,6 +40,7 @@ function CalendarSlotView({ userId, userRole }) {
     if (userRole !== 'STUDENT') return;
     
     const confirmMessage = `Book ${dayName} at ${timeDisplay} for ALL upcoming weeks?\n\nThis will be your regular weekly appointment.`;
+    // eslint-disable-next-line no-undef
     if (!globalThis.confirm(confirmMessage)) return;
     
     try {
