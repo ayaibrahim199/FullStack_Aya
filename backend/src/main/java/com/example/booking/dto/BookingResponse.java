@@ -8,8 +8,11 @@ public class BookingResponse {
     private LocalDateTime bookingDate;
     private Long studentId;
     private String studentName;
+    private String studentEmail;
     private SlotResponse slot;
     private String status;
+    private String teacherComment;
+    private LocalDateTime lastUpdated;
 
     public BookingResponse() {}
 
@@ -18,12 +21,15 @@ public class BookingResponse {
         this.bookingDate = booking.getBookingDate();
         if (booking.getStudent() != null) {
             this.studentId = booking.getStudent().getId();
-            this.studentName = booking.getStudent().getUsername();
+            this.studentName = booking.getStudent().getDisplayName();
+            this.studentEmail = booking.getStudent().getUsername();
         }
         if (booking.getSlot() != null) {
             this.slot = new SlotResponse(booking.getSlot());
         }
         this.status = booking.getStatus() != null ? booking.getStatus() : "PENDING";
+        this.teacherComment = booking.getTeacherComment();
+        this.lastUpdated = booking.getLastUpdated();
     }
 
     public Long getId() {
@@ -58,6 +64,14 @@ public class BookingResponse {
         this.studentName = studentName;
     }
 
+    public String getStudentEmail() {
+        return studentEmail;
+    }
+
+    public void setStudentEmail(String studentEmail) {
+        this.studentEmail = studentEmail;
+    }
+
     public SlotResponse getSlot() {
         return slot;
     }
@@ -72,5 +86,21 @@ public class BookingResponse {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getTeacherComment() {
+        return teacherComment;
+    }
+
+    public void setTeacherComment(String teacherComment) {
+        this.teacherComment = teacherComment;
+    }
+
+    public LocalDateTime getLastUpdated() {
+        return lastUpdated;
+    }
+
+    public void setLastUpdated(LocalDateTime lastUpdated) {
+        this.lastUpdated = lastUpdated;
     }
 }

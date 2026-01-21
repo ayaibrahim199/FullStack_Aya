@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/api';
 
 function Signup({ onSignup }) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('student');
@@ -16,14 +18,26 @@ function Signup({ onSignup }) {
     setLoading(true);
 
     try {
-      await authService.signup(username, password, [role]);
+      await authService.signup({
+        username,
+        password,
+        role: [role],
+        firstName,
+        lastName,
+      });
       // Auto-login after signup
       const response = await authService.signin(username, password);
+      const derivedName = [response.data.firstName, response.data.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      const displayName = response.data.displayName || derivedName || username;
       onSignup(
         response.data.token, 
         response.data.username, 
         response.data.id, 
-        response.data.role
+        response.data.role,
+        displayName
       );
       navigate('/dashboard');
     } catch (err) {
@@ -53,6 +67,31 @@ function Signup({ onSignup }) {
         )}
         
         <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="signup-first-name">First Name</label>
+            <input
+              id="signup-first-name"
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="e.g. Aya"
+              required
+              autoComplete="given-name"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="signup-last-name">Last Name</label>
+            <input
+              id="signup-last-name"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="e.g. Hassan"
+              required
+              autoComplete="family-name"
+            />
+          </div>
           <div className="form-group">
             <label htmlFor="signup-username">Username</label>
             <input

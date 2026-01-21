@@ -11,4 +11,6 @@ public interface AvailableSlotRepository extends JpaRepository<AvailableSlot, Lo
 
     // Find slots by teacher
     List<AvailableSlot> findByTeacher(User teacher);
+
+    List<AvailableSlot> findByTeacher_IdOrderByStartTimeAsc(Long teacherId);
 }

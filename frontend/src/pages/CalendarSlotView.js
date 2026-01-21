@@ -5,6 +5,31 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import './CalendarSlotView.css';
 
+const SLOT_STATUS_META = {
+  AVAILABLE: { label: 'Available', icon: '✅', className: 'status-available' },
+  PENDING: { label: 'Pending approval', icon: '⏳', className: 'status-pending' },
+  BOOKED: { label: 'Confirmed', icon: '🔒', className: 'status-booked' },
+  DISABLED: { label: 'Disabled', icon: '🚫', className: 'status-disabled' },
+  CHANGES_REQUESTED: { label: 'Changes requested', icon: '📝', className: 'status-changes' },
+  UNPUBLISHED: { label: 'Not enabled', icon: '🚫', className: 'status-disabled' }
+};
+
+const formatBookingStatusLabel = (status) => {
+  if (!status) return 'Pending';
+  const map = {
+    AVAILABLE: 'Available for students',
+    BOOKED: 'Confirmed lesson',
+    DISABLED: 'Hidden from students',
+    UNPUBLISHED: 'Not enabled yet',
+    PENDING: 'Waiting for your response',
+    CHANGES_REQUESTED: 'Teacher asked for edits',
+    CONFIRMED: 'Confirmed lesson',
+    REJECTED: 'Rejected',
+    CANCELLED: 'Cancelled'
+  };
+  return map[status] || status;
+};
+
 function CalendarSlotView({ userId, userRole }) {
   console.log('CalendarSlotView - Props received:', { userId, userRole });
   const [slots, setSlots] = useState([]);
@@ -17,6 +42,8 @@ function CalendarSlotView({ userId, userRole }) {
   const [editingSlot, setEditingSlot] = useState(null);
   const [editStartTime, setEditStartTime] = useState('');
   const [editEndTime, setEditEndTime] = useState('');
+  const [lessonType, setLessonType] = useState('weekly');
+  const [busySlotKey, setBusySlotKey] = useState(null);
   const navigate = useNavigate();
 
   const fetchSlots = useCallback(async () => {
@@ -42,8 +69,10 @@ function CalendarSlotView({ userId, userRole }) {
 
   const handleBookSlot = async (slotId, dayName, timeDisplay) => {
     if (userRole !== 'STUDENT') return;
-    
-    const confirmMessage = `Book ${dayName} at ${timeDisplay} for ALL upcoming weeks?\n\nThis will be your regular weekly appointment.`;
+
+    const readableDay = dayName || 'this day';
+    const readableTime = timeDisplay || 'this time';
+    const confirmMessage = `Book ${readableDay} at ${readableTime} for ALL upcoming weeks?\n\nThis becomes your recurring appointment.`;
     // eslint-disable-next-line no-undef
     if (!globalThis.confirm(confirmMessage)) return;
     
@@ -99,6 +128,98 @@ function CalendarSlotView({ userId, userRole }) {
     }
   };
 
+  const makeSlotKey = (dayDate, timeSlot, slot) => (slot?.id ? `slot-${slot.id}` : `${dayDate.toISOString()}-${timeSlot.start}`);
+
+  const buildSlotDateTimes = (date, timeSlot) => {
+    const start = new Date(date);
+    const [startHour, startMinute] = timeSlot.start.split(':').map((value) => Number.parseInt(value, 10));
+    start.setHours(startHour, startMinute, 0, 0);
+    const end = new Date(date);
+    const [endHour, endMinute] = timeSlot.end.split(':').map((value) => Number.parseInt(value, 10));
+    end.setHours(endHour, endMinute, 0, 0);
+    return {
+      startISO: start.toISOString(),
+      endISO: end.toISOString(),
+      display: `${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+    };
+  };
+
+  const handleSlotEnable = async (dayDate, timeSlot, slot) => {
+    if (busySlotKey) return;
+    const slotKey = makeSlotKey(dayDate, timeSlot, slot);
+    try {
+      setBusySlotKey(slotKey);
+      if (slot) {
+        await api.post(`/slots/${slot.id}/enable`);
+      } else {
+        const { startISO, endISO } = buildSlotDateTimes(dayDate, timeSlot);
+        await api.post(`/slots/create?teacherId=${userId}&startTime=${encodeURIComponent(startISO)}&endTime=${encodeURIComponent(endISO)}`);
+      }
+      setSuccessMessage('🔔 Slot enabled for students');
+      setTimeout(() => setSuccessMessage(''), 3500);
+      fetchSlots();
+    } catch (err) {
+      setError('Failed to enable slot: ' + (err.response?.data || err.message));
+    } finally {
+      setBusySlotKey(null);
+    }
+  };
+
+  const handleSlotDisable = async (slotId) => {
+    // eslint-disable-next-line no-undef
+    if (!globalThis.confirm('Disable this slot? Students will no longer see it.')) return;
+    try {
+      setBusySlotKey(`slot-${slotId}`);
+      await api.post(`/slots/${slotId}/disable`);
+      setSuccessMessage('Slot disabled');
+      setTimeout(() => setSuccessMessage(''), 3500);
+      fetchSlots();
+    } catch (err) {
+      setError('Failed to disable slot: ' + (err.response?.data || err.message));
+    } finally {
+      setBusySlotKey(null);
+    }
+  };
+
+  const handleBookingDecision = async (bookingId, actionType) => {
+    if (!bookingId) return;
+    let endpoint = `/bookings/${bookingId}/approve`;
+    let notePayload = null;
+    if (actionType === 'reject') {
+      // eslint-disable-next-line no-undef
+      if (!globalThis.confirm('Reject this booking request?')) return;
+      // eslint-disable-next-line no-undef
+      const note = globalThis.prompt('Add a short note for the student (optional):');
+      notePayload = note ? { note } : null;
+      endpoint = `/bookings/${bookingId}/reject`;
+    } else if (actionType === 'request_changes') {
+      // eslint-disable-next-line no-undef
+      const note = globalThis.prompt('Describe the change you need from the student:');
+      if (note === null) return;
+      notePayload = note.trim() ? { note: note.trim() } : null;
+      endpoint = `/bookings/${bookingId}/request-changes`;
+    }
+
+    if (actionType === 'approve') {
+      endpoint = `/bookings/${bookingId}/approve`;
+    }
+
+    try {
+      setBusySlotKey(`booking-${bookingId}`);
+      await api.post(endpoint, notePayload || {});
+      setSuccessMessage('Booking updated successfully');
+      setTimeout(() => setSuccessMessage(''), 3500);
+      fetchSlots();
+    } catch (err) {
+      setError('Failed to update booking: ' + (err.response?.data || err.message));
+    } finally {
+      setBusySlotKey(null);
+    }
+  };
+
+  const normalizedRole = userRole ? userRole.replace('ROLE_', '') : '';
+  const isTeacher = normalizedRole === 'TEACHER';
+
   const formatDateTimeLocal = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -106,51 +227,6 @@ function CalendarSlotView({ userId, userRole }) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  const handleCreateWeeklySlots = async () => {
-    if (userRole !== 'TEACHER') return;
-    
-    const confirmMessage = 'Create ALL weekly slots based on your schedule?\n\nThis will create slots for:\n• Sunday: 6 PM, 7 PM, 9 PM, 10 PM\n• Monday-Friday: 3 PM - 9 PM (6 slots each day)\n• Saturday: 9 AM - 11 AM';
-    // eslint-disable-next-line no-undef
-    if (!globalThis.confirm(confirmMessage)) return;
-    
-    try {
-      setLoading(true);
-      const currentWeekDates = getWeekDates(new Date());
-      const slotsToCreate = [];
-      
-      currentWeekDates.forEach(date => {
-        const slots = getAvailableTimeSlots(date);
-        slots.forEach(slot => {
-          const startDateTime = new Date(date);
-          const [startHour, startMinute] = slot.start.split(':');
-          startDateTime.setHours(Number.parseInt(startHour, 10), Number.parseInt(startMinute, 10), 0, 0);
-          
-          const endDateTime = new Date(date);
-          const [endHour, endMinute] = slot.end.split(':');
-          endDateTime.setHours(Number.parseInt(endHour, 10), Number.parseInt(endMinute, 10), 0, 0);
-          
-          slotsToCreate.push({
-            startTime: startDateTime.toISOString(),
-            endTime: endDateTime.toISOString()
-          });
-        });
-      });
-      
-      // Create all slots
-      for (const slotData of slotsToCreate) {
-        await api.post(`/slots/create?teacherId=${userId}`, slotData);
-      }
-      
-      setSuccessMessage(`✅ Successfully created ${slotsToCreate.length} weekly slots!`);
-      setTimeout(() => setSuccessMessage(''), 5000);
-      fetchSlots();
-    } catch (err) {
-      setError('Failed to create slots: ' + (err.response?.data?.message || err.response?.data || err.message));
-    } finally {
-      setLoading(false);
-    }
   };
 
   // Get available time slots helper function
@@ -225,192 +301,309 @@ function CalendarSlotView({ userId, userRole }) {
     setSelectedDate(newDate);
   };
 
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    if (mode === 'day') {
+      setSelectedDate(new Date());
+    }
+  };
+
+  const handleJumpToToday = () => {
+    setSelectedDate(new Date());
+  };
+
   const getSlotStatus = (slot) => {
     if (!slot) return null;
     
     const statusColors = {
-      'AVAILABLE': { bg: '#d4edda', border: '#28a745', text: '#155724' },
-      'BOOKED': { bg: '#fff3cd', border: '#ffc107', text: '#856404' },
-      'CANCELLED': { bg: '#f8d7da', border: '#dc3545', text: '#721c24' }
+      AVAILABLE: { bg: '#d1f4e0', border: '#22c55e', text: '#166534' },
+      PENDING: { bg: '#fff4d6', border: '#f6c343', text: '#7a4b00' },
+      BOOKED: { bg: '#e9e7ff', border: '#7c3aed', text: '#3c1c7d' },
+      CHANGES_REQUESTED: { bg: '#fef3c7', border: '#fbbf24', text: '#92400e' },
+      DISABLED: { bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
+      CANCELLED: { bg: '#f8d7da', border: '#dc3545', text: '#721c24' }
     };
     
-    return statusColors[slot.status] || statusColors['AVAILABLE'];
+    return statusColors[slot.status] || statusColors.AVAILABLE;
   };
 
-  // Week View Component - Simple Available Slots List
+  // Week View Component - click slots to control availability
   const WeekView = () => {
     const weekDates = getWeekDates(new Date());
     const today = new Date();
 
-    // Build available slots for the week
-    const weeklyAvailableSlots = weekDates.map(date => {
+    const weeklyData = weekDates.map((date) => {
       const existingSlots = getSlotsForDate(date);
-      
-      // For TEACHER: show template slots + existing slots
-      // For STUDENT: show ONLY existing slots from database
-      let slotsToShow;
-      
-      if (userRole === 'TEACHER') {
-        // Teacher sees all possible time slots
-        const daySlots = getAvailableTimeSlots(date);
-        slotsToShow = daySlots.map(timeSlot => {
-          const matchedSlot = existingSlots.find(slot => {
-            const slotStart = new Date(slot.startTime);
-            const slotHour = slotStart.getHours().toString().padStart(2, '0');
-            const slotMinute = slotStart.getMinutes().toString().padStart(2, '0');
-            return `${slotHour}:${slotMinute}` === timeSlot.start;
-          });
-          
-          return {
-            ...timeSlot,
-            slot: matchedSlot,
-            status: matchedSlot ? matchedSlot.status : 'UNAVAILABLE'
-          };
+
+      const teacherSlots = getAvailableTimeSlots(date).map((templateSlot) => {
+        const matchedSlot = existingSlots.find((slot) => {
+          const slotStart = new Date(slot.startTime);
+          const slotHour = slotStart.getHours().toString().padStart(2, '0');
+          const slotMinute = slotStart.getMinutes().toString().padStart(2, '0');
+          return `${slotHour}:${slotMinute}` === templateSlot.start;
         });
-      } else {
-        // Student sees ONLY slots that exist in database
-        slotsToShow = existingSlots.map(slot => {
+
+        return {
+          ...templateSlot,
+          slot: matchedSlot,
+          status: matchedSlot ? matchedSlot.status : 'UNPUBLISHED',
+          booking: matchedSlot?.currentBooking || null,
+          date,
+        };
+      });
+
+      const studentSlots = existingSlots
+        .filter((slot) => slot.status !== 'DISABLED')
+        .map((slot) => {
           const slotStart = new Date(slot.startTime);
           const slotEnd = new Date(slot.endTime);
-          const startHour = slotStart.getHours();
-          const endHour = slotEnd.getHours();
-          const startPeriod = startHour >= 12 ? 'PM' : 'AM';
-          const endPeriod = endHour >= 12 ? 'PM' : 'AM';
-          let displayStartHour;
-          if (startHour > 12) {
-            displayStartHour = startHour - 12;
-          } else if (startHour === 0) {
-            displayStartHour = 12;
-          } else {
-            displayStartHour = startHour;
-          }
-          
-          let displayEndHour;
-          if (endHour > 12) {
-            displayEndHour = endHour - 12;
-          } else if (endHour === 0) {
-            displayEndHour = 12;
-          } else {
-            displayEndHour = endHour;
-          }
-          
           return {
-            start: `${slotStart.getHours().toString().padStart(2, '0')}:${slotStart.getMinutes().toString().padStart(2, '0')}`,
-            end: `${slotEnd.getHours().toString().padStart(2, '0')}:${slotEnd.getMinutes().toString().padStart(2, '0')}`,
-            display: `${displayStartHour}:${slotStart.getMinutes().toString().padStart(2, '0')} ${startPeriod} – ${displayEndHour}:${slotEnd.getMinutes().toString().padStart(2, '0')} ${endPeriod}`,
-            slot: slot,
-            status: slot.status
+            slot,
+            status: slot.status,
+            display: `${slotStart.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} – ${slotEnd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
+            startTime: slotStart,
+            endTime: slotEnd,
           };
         });
-      }
-      
+
       return {
         date,
         dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
-        fullDate: date.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        shortName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        fullDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         isToday: isSameDay(date, today),
-        slots: slotsToShow
+        teacherSlots,
+        studentSlots,
       };
     });
 
-    return (
-      <div className="calendar-week-view">
-        <div className="week-navigation">
-          <h3 className="week-range">
-            📅 Weekly Schedule
-          </h3>
-          <p className="recurring-note">{userRole === 'TEACHER' ? 'Manage your weekly availability' : 'Select your preferred weekly time slot'}</p>
-        </div>
+    const helperCopy = lessonType === 'weekly'
+      ? 'Weekly lessons repeat automatically. Toggle any slot to instantly enable or disable student access.'
+      : 'Single lessons are perfect for ad-hoc sessions. This view is coming soon.';
 
-        <div className="availability-info">
-          {userRole === 'TEACHER' ? (
-            <>
-              <p><strong>👨‍🏫 Teacher Slot Management</strong></p>
-              <p>Create all your weekly time slots at once with the button below</p>
-              <p><strong>Schedule:</strong> Sun: 6-7 PM, 9-10 PM (4 slots) | Mon-Fri: 3-9 PM (6 slots) | Sat: 9-11 AM (2 slots)</p>
-              <button className="create-weekly-slots-btn" onClick={handleCreateWeeklySlots} disabled={loading}>
-                {loading ? '⏳ Creating Slots...' : '➕ Create All Weekly Slots'}
+    const renderTeacherSlotCard = (day, timeSlot) => {
+      const slot = timeSlot.slot;
+      const slotStatus = slot ? slot.status : 'UNPUBLISHED';
+      const booking = slot?.currentBooking;
+      const statusMeta = SLOT_STATUS_META[slotStatus] || SLOT_STATUS_META.UNPUBLISHED;
+      const slotKey = makeSlotKey(day.date, timeSlot, slot);
+      const slotBusy = busySlotKey === slotKey;
+      const bookingBusy = booking ? busySlotKey === `booking-${booking.id}` : false;
+
+      const renderActions = () => {
+        if (normalizedRole !== 'TEACHER') return null;
+        if (!slot) {
+          return (
+            <button
+              type="button"
+              className="slot-action primary"
+              onClick={() => handleSlotEnable(day.date, timeSlot, null)}
+              disabled={slotBusy}
+            >
+              {slotBusy ? 'Enabling…' : 'Enable slot'}
+            </button>
+          );
+        }
+
+        if (slot.status === 'DISABLED') {
+          return (
+            <button
+              type="button"
+              className="slot-action primary"
+              onClick={() => handleSlotEnable(day.date, timeSlot, slot)}
+              disabled={slotBusy}
+            >
+              {slotBusy ? 'Enabling…' : 'Enable slot'}
+            </button>
+          );
+        }
+
+        if (slot.status === 'AVAILABLE') {
+          return (
+            <div className="slot-action-row">
+              <button type="button" className="slot-action ghost" onClick={() => handleSlotDisable(slot.id)} disabled={slotBusy}>
+                {slotBusy ? 'Working…' : 'Disable'}
               </button>
-            </>
+              <button type="button" className="slot-action ghost" onClick={() => handleEditSlot(slot)}>
+                Edit
+              </button>
+              <button type="button" className="slot-action danger" onClick={() => handleDeleteSlot(slot.id)} disabled={slotBusy}>
+                {slotBusy ? 'Removing…' : 'Delete'}
+              </button>
+            </div>
+          );
+        }
+
+        if (slot.status === 'PENDING' || slot.status === 'CHANGES_REQUESTED') {
+          return (
+            <div className="slot-action-row decision">
+              <button type="button" className="slot-action success" onClick={() => handleBookingDecision(booking?.id, 'approve')} disabled={bookingBusy || !booking}>
+                {bookingBusy ? 'Updating…' : 'Accept'}
+              </button>
+              <button type="button" className="slot-action ghost" onClick={() => handleBookingDecision(booking?.id, 'request_changes')} disabled={bookingBusy || !booking}>
+                {bookingBusy ? 'Updating…' : 'Request changes'}
+              </button>
+              <button type="button" className="slot-action danger" onClick={() => handleBookingDecision(booking?.id, 'reject')} disabled={bookingBusy || !booking}>
+                {bookingBusy ? 'Updating…' : 'Reject'}
+              </button>
+            </div>
+          );
+        }
+
+        return (
+          <div className="slot-lock-msg">
+            <span>Lesson confirmed</span>
+            <small>Cancel from the booking tab.</small>
+          </div>
+        );
+      };
+
+      return (
+        <div key={`${day.shortName}-${timeSlot.start}`} className={`slot-card ${statusMeta.className}`}>
+          <div className="slot-card-head">
+            <span className="slot-time">{timeSlot.display}</span>
+            <span className={`slot-status-pill ${statusMeta.className}`}>
+              {statusMeta.icon} {statusMeta.label}
+            </span>
+          </div>
+          {booking && (
+            <div className="slot-booking-summary">
+              <span className="booking-avatar">👤</span>
+              <div>
+                <strong>{booking.studentName || 'Student'}</strong>
+                <small>{formatBookingStatusLabel(booking.status)}</small>
+              </div>
+            </div>
+          )}
+          {!booking && slotStatus === 'UNPUBLISHED' && (
+            <p className="slot-note">Turn this on so students can book it.</p>
+          )}
+          {slot && slot.status === 'DISABLED' && (
+            <p className="slot-note">Hidden from students until you enable it.</p>
+          )}
+          {slot && slot.status === 'BOOKED' && booking && (
+            <p className="slot-note">Booked by {booking.studentName || 'student'}</p>
+          )}
+          {renderActions()}
+        </div>
+      );
+    };
+
+    const renderStudentSlotCard = (slotWrapper, index) => {
+      const slot = slotWrapper.slot;
+      const statusMeta = SLOT_STATUS_META[slot.status] || SLOT_STATUS_META.AVAILABLE;
+      const showBookCta = slot.status === 'AVAILABLE';
+      const isLocked = slot.status === 'BOOKED';
+
+      return (
+        <div key={`student-slot-${slot.id}-${index}`} className={`slot-card ${statusMeta.className}`}>
+          <div className="slot-card-head">
+            <span className="slot-time">{slotWrapper.display}</span>
+            <span className={`slot-status-pill ${statusMeta.className}`}>
+              {statusMeta.icon} {statusMeta.label}
+            </span>
+          </div>
+          {isLocked && (
+            <div className="slot-booking-summary">
+              <span className="booking-avatar">🔒</span>
+              <div>
+                <strong>Reserved</strong>
+                <small>This session is confirmed for another student.</small>
+              </div>
+            </div>
+          )}
+          {showBookCta ? (
+            <button
+              type="button"
+              className="slot-action primary full"
+              onClick={() => handleBookSlot(slot.id, slotWrapper.dayName || '', slotWrapper.display)}
+              disabled={bookingSlotId === slot.id}
+            >
+              {bookingSlotId === slot.id ? 'Booking…' : 'Book this slot'}
+            </button>
           ) : (
-            <>
-              <p><strong>📅 Available Appointment Slots</strong></p>
-              <p>Book any available slot - you'll see only the time slots your teacher has created!</p>
-              <p>Slots are updated in real-time when teachers add, edit, or remove them.</p>
-            </>
+            <p className="slot-note subtle">{formatBookingStatusLabel(slot.status)}</p>
           )}
         </div>
-        
-        <div className="slots-list-container">
-          {weeklyAvailableSlots.map((day) => (
-            <div key={day.date.toISOString()} className={`day-section ${day.isToday ? 'today-section' : ''}`}>
-              <div className="day-header">
-                <h2 className="day-name-heading">{day.dayName}</h2>
-                {day.isToday && <span className="today-badge">Today</span>}
-              </div>
-              
-              <ul className="time-slots-list">
-                {day.slots.length === 0 && userRole === 'STUDENT' ? (
-                  <li className="slot-item unavailable-slot">
-                    <span className="slot-time-text">No slots available for this day</span>
-                  </li>
-                ) : (
-                  day.slots.map((timeSlot, index) => {
-                    const slot = timeSlot.slot;
-                    const isAvailable = slot?.status === 'AVAILABLE';
-                    const isBooked = slot?.status === 'BOOKED';
-                    const isUnavailable = !slot || timeSlot.status === 'UNAVAILABLE';
-                    
-                    return (
-                      <li key={`${day.dayName}-${index}`} className={`slot-item ${isAvailable ? 'available-slot' : ''} ${isBooked ? 'booked-slot' : ''} ${isUnavailable ? 'unavailable-slot' : ''}`}>
-                        <div className="slot-item-content">
-                          <span className="slot-time-text">{timeSlot.display}</span>
-                          <span className="slot-date-text">({day.fullDate})</span>
-                          
-                          {isAvailable && <span className="status-tag available-tag">✓ Available</span>}
-                          {isBooked && <span className="status-tag booked-tag">Booked</span>}
-                          {isUnavailable && <span className="status-tag unavailable-tag">Not Open</span>}
-                          
-                          {userRole === 'STUDENT' && isAvailable && (
-                            <button className="book-btn-inline" onClick={() => handleBookSlot(slot.id, day.dayName, timeSlot.display)}>
-                              Book
-                            </button>
-                          )}
-                          
-                          {userRole === 'TEACHER' && slot && (
-                            <div className="teacher-slot-actions">
-                              <button className="edit-btn-inline" onClick={() => handleEditSlot(slot)}>
-                                ✏️ Edit
-                              </button>
-                              <button className="delete-btn-inline" onClick={() => handleDeleteSlot(slot.id)}>
-                                🗑️ Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })
-                )}
-              </ul>
-            </div>
-          ))}
+      );
+    };
+
+    return (
+      <div className="calendar-week-view modern">
+        <div className="weekly-tabs">
+          <button
+            type="button"
+            className={`weekly-tab ${lessonType === 'weekly' ? 'active' : ''}`}
+            onClick={() => setLessonType('weekly')}
+          >
+            <span className="tab-title">Weekly lessons</span>
+            <span className="tab-subtitle">Perfect for recurring students</span>
+          </button>
+          <button
+            type="button"
+            className={`weekly-tab ${lessonType === 'single' ? 'active' : ''}`}
+            onClick={() => setLessonType('single')}
+          >
+            <span className="tab-title">Single lessons</span>
+            <span className="tab-subtitle">Plan ad-hoc sessions</span>
+          </button>
         </div>
 
-        <div className="legend-simple">
-          <div className="legend-item">
-            <span className="legend-dot available"></span>
-            <span>Available to Book</span>
+        <p className="lesson-helper-text">{helperCopy}</p>
+
+        {lessonType === 'single' ? (
+          <div className="single-lessons-placeholder">
+            <h3>Single lessons view</h3>
+            <p>This mode is coming soon. For now, manage recurring lessons via the Weekly view.</p>
           </div>
-          <div className="legend-item">
-            <span className="legend-dot booked"></span>
-            <span>Already Booked</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-dot unavailable"></span>
-            <span>Not Available Yet</span>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="weekly-grid">
+              {weeklyData.map((day) => (
+                <div key={day.date.toISOString()} className={`weekly-column ${day.isToday ? 'is-today' : ''}`}>
+                  <div className={`weekly-column-header ${day.isToday ? 'is-today' : ''}`}>
+                    <span className="weekday-name">{day.shortName}</span>
+                    <span className="weekday-date">{day.fullDate}</span>
+                  </div>
+                  <div className="weekly-column-body">
+                    {(normalizedRole === 'TEACHER' ? day.teacherSlots : day.studentSlots).length === 0 ? (
+                      <div className="weekly-placeholder">—</div>
+                    ) : (
+                      (normalizedRole === 'TEACHER' ? day.teacherSlots : day.studentSlots).map((slotItem, index) => (
+                        normalizedRole === 'TEACHER'
+                          ? renderTeacherSlotCard(day, slotItem)
+                          : renderStudentSlotCard({ ...slotItem, dayName: day.dayName }, index)
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="legend-simple modern">
+              <div className="legend-item">
+                <span className="legend-dot available"></span>
+                <span>Students can book</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot pending"></span>
+                <span>Awaiting approval</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot confirmed"></span>
+                <span>Confirmed lesson</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot changes"></span>
+                <span>Changes requested</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot disabled"></span>
+                <span>Disabled slot</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -418,75 +611,142 @@ function CalendarSlotView({ userId, userRole }) {
   // Day View Component
   const DayView = () => {
     const daySlots = getSlotsForDate(selectedDate);
+    const bookedSessions = daySlots.filter((slot) => {
+      if (!slot || !slot.status) {
+        return false;
+      }
+      return slot.status.toUpperCase() === 'BOOKED' && Boolean(slot.currentBooking);
+    });
+    const sessionsToDisplay = isTeacher ? bookedSessions : daySlots;
+    const isShowingToday = isSameDay(selectedDate, new Date());
+
+    const renderTeacherSessionCard = (slot) => {
+      const booking = slot.currentBooking || {};
+      const startDate = new Date(slot.startTime);
+      const endDate = new Date(slot.endTime);
+      const timeRange = `${formatTime(startDate)} – ${formatTime(endDate)}`;
+      const displayNameSource = booking.studentName || booking.studentEmail || '';
+      const studentLabel = (displayNameSource || 'Student').trim() || 'Student';
+      const avatarLabel = studentLabel.charAt(0).toUpperCase() || 'S';
+      const showStudentEmail = Boolean(booking.studentEmail && booking.studentEmail !== studentLabel);
+      const durationMinutes = Math.round((endDate - startDate) / (1000 * 60));
+
+      return (
+        <div key={slot.id} className="session-card">
+          <div className="session-card-head">
+            <div className="session-time-range">{timeRange}</div>
+            <span className="session-status-chip">Booked</span>
+          </div>
+          <div className="session-card-body">
+            <div className="session-student">
+              <div className="session-avatar" aria-hidden="true">{avatarLabel}</div>
+              <div>
+                <div className="session-student-name">{studentLabel}</div>
+                {showStudentEmail && (
+                  <div className="session-student-email">{booking.studentEmail}</div>
+                )}
+                <div className="session-meta">Session status: Booked</div>
+              </div>
+            </div>
+            <div className="session-duration">Duration: {durationMinutes} min</div>
+          </div>
+        </div>
+      );
+    };
+
+    const renderStudentDaySlot = (slot) => {
+      const statusStyle = getSlotStatus(slot);
+      const slotStatusValue = (slot.status || '').toUpperCase();
+      return (
+        <div 
+          key={slot.id}
+          className="day-slot-card"
+          style={{
+            backgroundColor: statusStyle?.bg,
+            borderColor: statusStyle?.border,
+          }}
+        >
+          <div className="slot-header">
+            <div className="slot-time-range">
+              <span className="time-start">{formatTime(new Date(slot.startTime))}</span>
+              <span className="time-separator">→</span>
+              <span className="time-end">{formatTime(new Date(slot.endTime))}</span>
+            </div>
+            <div className="slot-status-badge" style={{ color: statusStyle?.text }}>
+              {formatBookingStatusLabel(slot.status)}
+            </div>
+          </div>
+          <div className="slot-details">
+            <div className="teacher-info">
+              <span className="teacher-icon">👨‍🏫</span>
+              <span className="teacher-name">
+                {slot.teacherName || slot.teacherEmail || 'Unknown Teacher'}
+              </span>
+            </div>
+            <div className="slot-duration">
+              Duration: {Math.round((new Date(slot.endTime) - new Date(slot.startTime)) / (1000 * 60))} minutes
+            </div>
+          </div>
+          {normalizedRole === 'STUDENT' && slotStatusValue === 'AVAILABLE' && (
+            <button 
+              className="book-slot-button"
+              onClick={() => {
+                const dayName = selectedDate.toLocaleDateString('en-US', { weekday: 'long' });
+                const timeLabel = `${formatTime(new Date(slot.startTime))} – ${formatTime(new Date(slot.endTime))}`;
+                handleBookSlot(slot.id, dayName, timeLabel);
+              }}
+              disabled={bookingSlotId === slot.id}
+            >
+              {bookingSlotId === slot.id ? 'Booking…' : 'Book This Slot'}
+            </button>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="calendar-day-view">
         <div className="day-header">
-          <button onClick={() => navigateDay(-1)} className="nav-button">←</button>
-          <h3>{selectedDate.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}</h3>
-          <button onClick={() => navigateDay(1)} className="nav-button">→</button>
+          <div className="day-nav-group">
+            <button type="button" onClick={() => navigateDay(-1)} className="nav-button" aria-label="Previous day">←</button>
+          </div>
+          <div className="day-title-group">
+            <h3>
+              {selectedDate.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
+            </h3>
+            {isShowingToday && <span className="today-chip">Today</span>}
+            {isTeacher && <p className="day-subtitle">Today’s booked sessions</p>}
+          </div>
+          <div className="day-nav-group">
+            <button
+              type="button"
+              className={`nav-button today-button ${isShowingToday ? 'active' : ''}`}
+              onClick={handleJumpToToday}
+            >
+              Today
+            </button>
+            <button type="button" onClick={() => navigateDay(1)} className="nav-button" aria-label="Next day">→</button>
+          </div>
         </div>
         
         <div className="day-slots">
-          {daySlots.length === 0 ? (
+          {sessionsToDisplay.length === 0 ? (
             <div className="no-slots">
               <div className="empty-state">
                 <span className="empty-icon">📅</span>
-                <h4>No appointments scheduled</h4>
-                <p>This day is completely free!</p>
+                <h4>{isTeacher ? 'No sessions booked for today.' : 'No appointments scheduled'}</h4>
+                <p>{isTeacher ? 'Students haven’t booked anything for this day yet.' : 'This day is completely free!'}</p>
               </div>
             </div>
           ) : (
-            daySlots.map((slot) => {
-              const statusStyle = getSlotStatus(slot);
-              return (
-                <div 
-                  key={slot.id}
-                  className="day-slot-card"
-                  style={{
-                    backgroundColor: statusStyle?.bg,
-                    borderColor: statusStyle?.border,
-                  }}
-                >
-                  <div className="slot-header">
-                    <div className="slot-time-range">
-                      <span className="time-start">{formatTime(new Date(slot.startTime))}</span>
-                      <span className="time-separator">→</span>
-                      <span className="time-end">{formatTime(new Date(slot.endTime))}</span>
-                    </div>
-                    <div className="slot-status-badge" style={{ color: statusStyle?.text }}>
-                      {slot.status}
-                    </div>
-                  </div>
-                  
-                  <div className="slot-details">
-                    <div className="teacher-info">
-                      <span className="teacher-icon">👨‍🏫</span>
-                      <span className="teacher-name">{slot.teacher?.username || 'Unknown Teacher'}</span>
-                    </div>
-                    
-                    <div className="slot-duration">
-                      Duration: {Math.round((new Date(slot.endTime) - new Date(slot.startTime)) / (1000 * 60))} minutes
-                    </div>
-                  </div>
-                  
-                  {userRole === 'STUDENT' && slot.status === 'AVAILABLE' && (
-                    <button 
-                      className="book-slot-button"
-                      onClick={() => handleBookSlot(slot.id)}
-                      disabled={bookingSlotId === slot.id}
-                    >
-                      {bookingSlotId === slot.id ? 'Booking...' : 'Book This Slot'}
-                    </button>
-                  )}
-                </div>
-              );
-            })
+            sessionsToDisplay.map((slot) => (
+              isTeacher ? renderTeacherSessionCard(slot) : renderStudentDaySlot(slot)
+            ))
           )}
         </div>
       </div>
@@ -504,8 +764,6 @@ function CalendarSlotView({ userId, userRole }) {
     );
   }
 
-  // If userRole is not properly formatted, try to use it anyway or show error
-  const normalizedRole = userRole ? userRole.replace('ROLE_', '') : '';
   if (!normalizedRole || (normalizedRole !== 'STUDENT' && normalizedRole !== 'TEACHER')) {
     return (
       <div className="calendar-container">
@@ -521,29 +779,32 @@ function CalendarSlotView({ userId, userRole }) {
 
   return (
     <div className="calendar-container">
-      <div className="calendar-header">
-        <div>
-          <h1>📅 {normalizedRole === 'STUDENT' ? 'Available Appointment Slots' : 'My Teaching Schedule'}</h1>
-          <p>{normalizedRole === 'STUDENT' ? 'Select a time that works best for you' : 'Manage your availability and bookings'}</p>
+      <section className="calendar-intro-card">
+        <div className="intro-icon" aria-hidden="true">📅</div>
+        <div className="intro-text">
+          <h1>Mrs. Aya’s Teaching Schedule</h1>
+          <p>Manage your availability and student bookings</p>
         </div>
-        
-        <div className="view-controls">
+      </section>
+
+      <div className="view-controls compact">
+        <div className="view-toggle">
           <button 
             className={`view-button ${viewMode === 'week' ? 'active' : ''}`}
-            onClick={() => setViewMode('week')}
+            onClick={() => handleViewModeChange('week')}
           >
-            Week View
+            Week
           </button>
           <button 
             className={`view-button ${viewMode === 'day' ? 'active' : ''}`}
-            onClick={() => setViewMode('day')}
+            onClick={() => handleViewModeChange('day')}
           >
-            Day View
-          </button>
-          <button className="back-button" onClick={() => navigate('/dashboard')}>
-            ← Back
+            Day
           </button>
         </div>
+        <button className="back-link" onClick={() => navigate('/dashboard')}>
+          ← Back
+        </button>
       </div>
 
       {successMessage && <div className="success">{successMessage}</div>}

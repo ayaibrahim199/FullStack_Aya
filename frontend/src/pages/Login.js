@@ -16,11 +16,17 @@ function Login({ onLogin }) {
 
     try {
       const response = await authService.signin(username, password);
+      const derivedName = [response.data.firstName, response.data.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      const displayName = response.data.displayName || derivedName || response.data.username;
       onLogin(
         response.data.token, 
         response.data.username, 
         response.data.id, 
-        response.data.role
+        response.data.role,
+        displayName
       );
       navigate('/dashboard');
     } catch (err) {

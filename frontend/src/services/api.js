@@ -19,8 +19,8 @@ api.interceptors.request.use((config) => {
 });
 
 export const authService = {
-  signup: (username, password, role) => 
-    api.post('/auth/signup', { username, password, role }),
+  signup: ({ username, password, role, firstName, lastName }) => 
+    api.post('/auth/signup', { username, password, role, firstName, lastName }),
   
   signin: (username, password) => 
     api.post('/auth/signin', { username, password }),

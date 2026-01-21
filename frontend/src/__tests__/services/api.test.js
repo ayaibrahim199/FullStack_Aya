@@ -20,7 +20,14 @@ describe('API Service', () => {
       const mockResponse = { data: { message: 'User registered' } };
       axios.post.mockResolvedValueOnce(mockResponse);
 
-      const result = await api.signup('testuser', 'password123', ['student']);
+      const result = await api.signup({
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'password123',
+        role: ['student'],
+        firstName: 'Test',
+        lastName: 'User'
+      });
 
       expect(axios.post).toHaveBeenCalledWith(
         expect.stringContaining('/api/auth/signup'),
@@ -34,7 +41,10 @@ describe('API Service', () => {
           token: 'jwt_token_here',
           username: 'testuser',
           userId: 1,
-          role: 'ROLE_STUDENT'
+          role: 'ROLE_STUDENT',
+          displayName: 'Test User',
+          firstName: 'Test',
+          lastName: 'User'
         }
       };
       axios.post.mockResolvedValueOnce(mockResponse);
@@ -44,6 +54,7 @@ describe('API Service', () => {
       expect(result).toHaveProperty('token');
       expect(result).toHaveProperty('userId');
       expect(result.username).toBe('testuser');
+      expect(result.displayName).toBe('Test User');
     });
 
     test('signin - stores token in localStorage', async () => {
@@ -52,7 +63,10 @@ describe('API Service', () => {
           token: 'jwt_token_here',
           username: 'testuser',
           userId: 1,
-          role: 'ROLE_STUDENT'
+          role: 'ROLE_STUDENT',
+          displayName: 'Test User',
+          firstName: 'Test',
+          lastName: 'User'
         }
       };
       axios.post.mockResolvedValueOnce(mockResponse);

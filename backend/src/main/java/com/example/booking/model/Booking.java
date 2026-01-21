@@ -12,7 +12,12 @@ public class Booking {
     private LocalDateTime bookingDate;
 
     @Column(nullable = false)
-    private String status = "PENDING"; // PENDING, CONFIRMED, REJECTED, CANCELLED
+    private String status = "PENDING"; // PENDING, CONFIRMED, REJECTED, CANCELLED, CHANGES_REQUESTED
+
+    @Column(length = 1000)
+    private String teacherComment;
+
+    private LocalDateTime lastUpdated;
 
     @ManyToOne
     @JoinColumn(name = "student_id")
@@ -61,5 +66,21 @@ public class Booking {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getTeacherComment() {
+        return teacherComment;
+    }
+
+    public void setTeacherComment(String teacherComment) {
+        this.teacherComment = teacherComment;
+    }
+
+    public LocalDateTime getLastUpdated() {
+        return lastUpdated;
+    }
+
+    public void setLastUpdated(LocalDateTime lastUpdated) {
+        this.lastUpdated = lastUpdated;
     }
 }

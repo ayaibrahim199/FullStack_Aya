@@ -6,6 +6,8 @@ public class SignupRequest {
     private String username;
     private String password;
     private Set<String> role;
+    private String firstName;
+    private String lastName;
 
     // Getters and Setters
     public String getUsername() {
@@ -30,5 +32,21 @@ public class SignupRequest {
 
     public void setRole(Set<String> role) {
         this.role = role;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
     }
 }

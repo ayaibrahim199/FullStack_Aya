@@ -7,43 +7,67 @@ import CalendarSlotView from './pages/CalendarSlotView';
 import MyBookings from './pages/MyBookings';
 import StudentStatistics from './pages/StudentStatistics';
 import TeacherDashboard from './pages/TeacherDashboard';
+import DebugAuth from './pages/DebugAuth';
 import './App.css';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [userRole, setUserRole] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('token')));
+  const [user, setUser] = useState(() => localStorage.getItem('displayName') || localStorage.getItem('username'));
+  const [userId, setUserId] = useState(() => localStorage.getItem('userId'));
+  const [userRole, setUserRole] = useState(() => localStorage.getItem('userRole'));
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
     // Check if user is already logged in
     const token = localStorage.getItem('token');
     const username = localStorage.getItem('username');
+    const displayName = localStorage.getItem('displayName');
     const id = localStorage.getItem('userId');
     const role = localStorage.getItem('userRole');
     
+    console.log('App.js - useEffect checking localStorage:', { 
+      token: token ? 'present' : 'missing', 
+      username, 
+      displayName,
+      id, 
+      role 
+    });
+    
     if (token && username && id) {
       setIsAuthenticated(true);
-      setUser(username);
+      setUser(displayName || username);
       setUserId(id);
       setUserRole(role);
+      console.log('App.js - User restored from localStorage:', { isAuthenticated: true, userId: id, userRole: role });
+    } else {
+      setIsAuthenticated(false);
+      setUser(null);
+      setUserId(null);
+      setUserRole(null);
     }
+
+    setBootstrapped(true);
   }, []);
 
-  const handleLogin = (token, username, id, role) => {
+  const handleLogin = (token, username, id, role, displayName) => {
+    const normalizedId = id != null ? String(id) : '';
+    console.log('App.js - handleLogin called with:', { token: token ? 'present' : 'missing', username, displayName, id: normalizedId, role });
     localStorage.setItem('token', token);
     localStorage.setItem('username', username);
-    localStorage.setItem('userId', id);
+    localStorage.setItem('displayName', displayName || username);
+    localStorage.setItem('userId', normalizedId);
     localStorage.setItem('userRole', role);
     setIsAuthenticated(true);
-    setUser(username);
-    setUserId(id);
+    setUser(displayName || username);
+    setUserId(normalizedId);
     setUserRole(role);
+    console.log('App.js - After login state set:', { isAuthenticated: true, userId: normalizedId, userRole: role });
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
+    localStorage.removeItem('displayName');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
     setIsAuthenticated(false);
@@ -52,8 +76,22 @@ function App() {
     setUserRole(null);
   };
 
+  if (!bootstrapped) {
+    return (
+      <div className="app-loading" style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      }}>
+        <p>Loading your session...</p>
+      </div>
+    );
+  }
+
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       {isAuthenticated && (
         <nav className="navbar">
           <h1>📅 Smart Appointment Booking</h1>
@@ -91,7 +129,13 @@ function App() {
         />
         <Route 
           path="/available-slots" 
-          element={isAuthenticated ? <CalendarSlotView userId={userId} userRole={userRole} /> : <Navigate to="/login" />} 
+          element={isAuthenticated ? (
+            <CalendarSlotView 
+              userId={userId} 
+              userName={user} 
+              userRole={userRole ? userRole.replace('ROLE_', '') : ''} 
+            />
+          ) : <Navigate to="/login" />} 
         />
         <Route 
           path="/my-bookings" 
@@ -106,8 +150,26 @@ function App() {
           element={isAuthenticated && userRole === 'ROLE_TEACHER' ? <TeacherDashboard userId={userId} userName={user} /> : <Navigate to="/dashboard" />} 
         />
         <Route 
+          path="/teacher-slots" 
+          element={isAuthenticated && userRole === 'ROLE_TEACHER' ? (
+            <CalendarSlotView 
+              userId={userId} 
+              userName={user} 
+              userRole="TEACHER" 
+            />
+          ) : <Navigate to="/dashboard" />} 
+        />
+        <Route 
+          path="/debug" 
+          element={<DebugAuth />} 
+        />
+        <Route 
           path="/" 
           element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="*" 
+          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />} 
         />
       </Routes>
     </BrowserRouter>

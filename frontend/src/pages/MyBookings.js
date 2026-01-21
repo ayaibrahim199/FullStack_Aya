@@ -137,7 +137,7 @@ function MyBookings({ userId }) {
             >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                 <div>
-                  <strong>👨‍🏫 Teacher:</strong> {booking.slot?.teacher?.username || 'N/A'}
+                  <strong>👨‍🏫 Teacher:</strong> {booking.slot?.teacherName || booking.slot?.teacherEmail || 'N/A'}
                 </div>
                 <div>
                   <strong>📌 Status:</strong> <span style={{ color: getStatusColor(booking.status), fontWeight: 'bold' }}>{booking.status}</span>

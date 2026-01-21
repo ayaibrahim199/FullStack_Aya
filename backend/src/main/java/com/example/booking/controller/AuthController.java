@@ -13,7 +13,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -41,7 +40,16 @@ public class AuthController {
                 .findFirst()
                 .orElse("ROLE_STUDENT");
         
-        return ResponseEntity.ok(new JwtResponse(jwt, authentication.getName(), user.getId(), role));
+        String displayName = user.getDisplayName();
+        return ResponseEntity.ok(new JwtResponse(
+            jwt,
+            authentication.getName(),
+            user.getId(),
+            role,
+            displayName,
+            user.getFirstName(),
+            user.getLastName()
+        ));
     }
 
     @PostMapping("/signup")
@@ -53,6 +61,8 @@ public class AuthController {
         User user = new User();
         user.setUsername(signUpRequest.getUsername());
         user.setPassword(encoder.encode(signUpRequest.getPassword()));
+        user.setFirstName(resolveFirstName(signUpRequest.getFirstName(), signUpRequest.getUsername()));
+        user.setLastName(resolveOptionalName(signUpRequest.getLastName()));
 
         Set<String> strRoles = signUpRequest.getRole();
         Set<Role> roles = new HashSet<>();
@@ -85,5 +95,38 @@ public class AuthController {
     @GetMapping("/health")
     public ResponseEntity<?> health() {
         return ResponseEntity.ok().body(Map.of("status", "OK", "timestamp", new Date()));
+    }
+
+    private String resolveFirstName(String rawValue, String usernameFallback) {
+        if (rawValue != null) {
+            String trimmed = rawValue.trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+
+        if (usernameFallback != null && !usernameFallback.isBlank()) {
+            String candidate = usernameFallback;
+            int atIndex = candidate.indexOf('@');
+            if (atIndex > 0) {
+                candidate = candidate.substring(0, atIndex);
+            }
+            candidate = candidate.replace('.', ' ').replace('_', ' ').trim();
+            if (!candidate.isEmpty()) {
+                return candidate;
+            }
+        }
+
+        return "User";
+    }
+
+    private String resolveOptionalName(String rawValue) {
+        if (rawValue != null) {
+            String trimmed = rawValue.trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        return "";
     }
 }

@@ -54,9 +54,9 @@ function StudentStatistics({ userId }) {
     // Teacher analysis
     const teacherStats = {};
     bookingsData.forEach(booking => {
-      if (booking.slot?.teacher?.username) {
-        const teacherName = booking.slot.teacher.username;
-        teacherStats[teacherName] = (teacherStats[teacherName] || 0) + 1;
+      const teacherLabel = booking.slot?.teacherName || booking.slot?.teacherEmail;
+      if (teacherLabel) {
+        teacherStats[teacherLabel] = (teacherStats[teacherLabel] || 0) + 1;
       }
     });
     

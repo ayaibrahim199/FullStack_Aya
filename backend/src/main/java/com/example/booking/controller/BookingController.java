@@ -1,13 +1,13 @@
 package com.example.booking.controller;
 
 import com.example.booking.model.Booking;
+import com.example.booking.dto.BookingDecisionRequest;
+import com.example.booking.dto.BookingResponse;
 import com.example.booking.model.AvailableSlot;
 import com.example.booking.model.User;
-import com.example.booking.repository.BookingRepository;
 import com.example.booking.repository.AvailableSlotRepository;
+import com.example.booking.repository.BookingRepository;
 import com.example.booking.repository.UserRepository;
-import com.example.booking.service.BookingService;
-import com.example.booking.dto.BookingResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,9 +19,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/bookings")
 public class BookingController {
-
-    @Autowired
-    private BookingService bookingService;
 
     @Autowired
     private BookingRepository bookingRepository;
@@ -44,6 +41,36 @@ public class BookingController {
             return ResponseEntity.ok(bookingResponses);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error fetching bookings: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{bookingId}/request-changes")
+    public ResponseEntity<?> requestChanges(@PathVariable Long bookingId,
+                                            @RequestBody(required = false) BookingDecisionRequest decisionRequest) {
+        try {
+            Booking booking = bookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new RuntimeException("Booking not found"));
+
+            if (!"PENDING".equals(booking.getStatus()) && !"CHANGES_REQUESTED".equals(booking.getStatus())) {
+                return ResponseEntity.badRequest().body("Booking is not awaiting review");
+            }
+
+            booking.setStatus("CHANGES_REQUESTED");
+            String note = decisionRequest != null ? decisionRequest.getNote() : null;
+            booking.setTeacherComment(note != null && !note.isBlank() ? note.trim() : null);
+            booking.setLastUpdated(LocalDateTime.now());
+
+            AvailableSlot slot = booking.getSlot();
+            if (slot != null) {
+                slot.setStatus("PENDING");
+                slotRepository.save(slot);
+            }
+
+            Booking updatedBooking = bookingRepository.save(booking);
+            BookingResponse bookingResponse = new BookingResponse(updatedBooking);
+            return ResponseEntity.ok(bookingResponse);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error requesting changes: " + e.getMessage());
         }
     }
 
@@ -81,17 +108,33 @@ public class BookingController {
                 return ResponseEntity.badRequest().body("Slot is not available");
             }
 
+            // Ensure there is no existing booking row for this slot (database enforces unique constraint)
+            var existingBooking = bookingRepository.findFirstBySlot_Id(slotId);
+            if (existingBooking.isPresent()) {
+                String existingStatus = existingBooking.get().getStatus();
+                boolean isStale = "CANCELLED".equalsIgnoreCase(existingStatus) || "REJECTED".equalsIgnoreCase(existingStatus);
+
+                if (isStale) {
+                    bookingRepository.delete(existingBooking.get());
+                } else {
+                    return ResponseEntity.badRequest()
+                            .body("This time slot has already been booked by another student. Please pick a different slot.");
+                }
+            }
+
             Booking booking = new Booking();
             booking.setStudent(student);
             booking.setSlot(slot);
             booking.setBookingDate(LocalDateTime.now());
             booking.setStatus("PENDING"); // Set initial status as PENDING
-
-            // Don't change slot status to BOOKED yet - wait for teacher approval
-            // slot.setStatus("BOOKED");
-            // slotRepository.save(slot);
+            booking.setTeacherComment(null);
+            booking.setLastUpdated(LocalDateTime.now());
 
             Booking savedBooking = bookingRepository.save(booking);
+
+            // Move slot into pending state so other students cannot take it until teacher responds
+            slot.setStatus("PENDING");
+            slotRepository.save(slot);
             BookingResponse bookingResponse = new BookingResponse(savedBooking);
             return ResponseEntity.ok(bookingResponse);
         } catch (Exception e) {
@@ -106,12 +149,14 @@ public class BookingController {
             Booking booking = bookingRepository.findById(bookingId)
                     .orElseThrow(() -> new RuntimeException("Booking not found"));
 
-            if (!"PENDING".equals(booking.getStatus())) {
-                return ResponseEntity.badRequest().body("Booking is not in pending state");
+            if (!"PENDING".equals(booking.getStatus()) && !"CHANGES_REQUESTED".equals(booking.getStatus())) {
+                return ResponseEntity.badRequest().body("Booking is not awaiting approval");
             }
 
             // Update booking status to confirmed
             booking.setStatus("CONFIRMED");
+            booking.setTeacherComment(null);
+            booking.setLastUpdated(LocalDateTime.now());
             
             // Update slot status to booked
             AvailableSlot slot = booking.getSlot();
@@ -130,20 +175,28 @@ public class BookingController {
 
     // Reject a booking (for teachers)
     @PostMapping("/{bookingId}/reject")
-    public ResponseEntity<?> rejectBooking(@PathVariable Long bookingId) {
+    public ResponseEntity<?> rejectBooking(@PathVariable Long bookingId,
+                                           @RequestBody(required = false) BookingDecisionRequest decisionRequest) {
         try {
             Booking booking = bookingRepository.findById(bookingId)
                     .orElseThrow(() -> new RuntimeException("Booking not found"));
 
-            if (!"PENDING".equals(booking.getStatus())) {
-                return ResponseEntity.badRequest().body("Booking is not in pending state");
+            if (!"PENDING".equals(booking.getStatus()) && !"CHANGES_REQUESTED".equals(booking.getStatus())) {
+                return ResponseEntity.badRequest().body("Booking is not in a rejectable state");
             }
 
             // Update booking status to rejected
             booking.setStatus("REJECTED");
+            String note = decisionRequest != null ? decisionRequest.getNote() : null;
+            booking.setTeacherComment(note != null && !note.isBlank() ? note.trim() : null);
+            booking.setLastUpdated(LocalDateTime.now());
             
             // Keep slot as available since booking is rejected
-            // No need to change slot status
+            AvailableSlot slot = booking.getSlot();
+            if (slot != null) {
+                slot.setStatus("AVAILABLE");
+                slotRepository.save(slot);
+            }
             
             Booking updatedBooking = bookingRepository.save(booking);
             BookingResponse bookingResponse = new BookingResponse(updatedBooking);
@@ -180,10 +233,11 @@ public class BookingController {
 
             // Update booking status to cancelled
             booking.setStatus("CANCELLED");
+            booking.setLastUpdated(LocalDateTime.now());
 
             // Free up the slot if it was confirmed
             AvailableSlot slot = booking.getSlot();
-            if (slot != null && "BOOKED".equals(slot.getStatus())) {
+            if (slot != null && ("BOOKED".equals(slot.getStatus()) || "PENDING".equals(slot.getStatus()) || "CHANGES_REQUESTED".equals(slot.getStatus()))) {
                 slot.setStatus("AVAILABLE");
                 slotRepository.save(slot);
             }

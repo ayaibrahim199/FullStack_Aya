@@ -19,6 +19,12 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_name")
+    private String lastName;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles", 
                joinColumns = @JoinColumn(name = "user_id"), 
@@ -55,6 +61,22 @@ public class User {
         this.password = password;
     }
 
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
     public Set<Role> getRoles() {
         return roles;
     }
@@ -77,5 +99,19 @@ public class User {
 
     public void setBookings(List<Booking> bookings) {
         this.bookings = bookings;
+    }
+
+    @Transient
+    public String getDisplayName() {
+        if ((firstName == null || firstName.isBlank()) && (lastName == null || lastName.isBlank())) {
+            return username;
+        }
+        if (firstName == null || firstName.isBlank()) {
+            return lastName;
+        }
+        if (lastName == null || lastName.isBlank()) {
+            return firstName;
+        }
+        return (firstName + " " + lastName).trim();
     }
 }

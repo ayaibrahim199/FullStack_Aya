@@ -38,21 +38,51 @@ public class DataInitializer {
             }
             
             // Initialize demo users
-            if (userRepository.findByUsername("teacher@example.com").isEmpty()) {
+            userRepository.findByUsername("teacher@example.com").ifPresentOrElse(existing -> {
+                boolean needsUpdate = false;
+                if (existing.getFirstName() == null || existing.getFirstName().isBlank()) {
+                    existing.setFirstName("Aya");
+                    needsUpdate = true;
+                }
+                if (existing.getLastName() == null || existing.getLastName().isBlank()) {
+                    existing.setLastName("Hassan");
+                    needsUpdate = true;
+                }
+                if (needsUpdate) {
+                    userRepository.save(existing);
+                }
+            }, () -> {
                 User teacher = new User();
                 teacher.setUsername("teacher@example.com");
                 teacher.setPassword(passwordEncoder.encode("teacher123"));
+                teacher.setFirstName("Aya");
+                teacher.setLastName("Hassan");
                 teacher.setRoles(Set.of(teacherRole));
                 userRepository.save(teacher);
-            }
+            });
             
-            if (userRepository.findByUsername("student@example.com").isEmpty()) {
+            userRepository.findByUsername("student@example.com").ifPresentOrElse(existing -> {
+                boolean needsUpdate = false;
+                if (existing.getFirstName() == null || existing.getFirstName().isBlank()) {
+                    existing.setFirstName("Ali");
+                    needsUpdate = true;
+                }
+                if (existing.getLastName() == null || existing.getLastName().isBlank()) {
+                    existing.setLastName("Khalid");
+                    needsUpdate = true;
+                }
+                if (needsUpdate) {
+                    userRepository.save(existing);
+                }
+            }, () -> {
                 User student = new User();
                 student.setUsername("student@example.com");
                 student.setPassword(passwordEncoder.encode("student123"));
+                student.setFirstName("Ali");
+                student.setLastName("Khalid");
                 student.setRoles(Set.of(studentRole));
                 userRepository.save(student);
-            }
+            });
         };
     }
 }
