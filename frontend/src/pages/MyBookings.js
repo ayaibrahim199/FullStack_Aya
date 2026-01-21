@@ -36,6 +36,7 @@ function MyBookings({ userId }) {
   };
 
   const handleCancelBooking = async (bookingId) => {
+    // eslint-disable-next-line no-undef
     if (!globalThis.confirm('Are you sure you want to cancel this booking?')) {
       return;
     }
@@ -110,12 +111,12 @@ function MyBookings({ userId }) {
                 marginTop: '15px',
                 padding: '10px 20px',
                 background: '#667eea',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '16px'
-            }}
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
           >
             Browse Available Slots
           </button>

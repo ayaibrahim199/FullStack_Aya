@@ -81,6 +81,7 @@ function CalendarSlotView({ userId, userRole }) {
   };
 
   const handleDeleteSlot = async (slotId) => {
+    // eslint-disable-next-line no-undef
     if (!globalThis.confirm('Delete this time slot? Students will no longer see it.')) return;
     
     try {
@@ -106,6 +107,7 @@ function CalendarSlotView({ userId, userRole }) {
     if (userRole !== 'TEACHER') return;
     
     const confirmMessage = 'Create ALL weekly slots based on your schedule?\n\nThis will create slots for:\n• Sunday: 6 PM, 7 PM, 9 PM, 10 PM\n• Monday-Friday: 3 PM - 9 PM (6 slots each day)\n• Saturday: 9 AM - 11 AM';
+    // eslint-disable-next-line no-undef
     if (!globalThis.confirm(confirmMessage)) return;
     
     try {
