@@ -6,6 +6,7 @@ import api from '../services/api';
 import './CalendarSlotView.css';
 
 function CalendarSlotView({ userId, userRole }) {
+  console.log('CalendarSlotView - Props received:', { userId, userRole });
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,10 +23,13 @@ function CalendarSlotView({ userId, userRole }) {
     try {
       setLoading(true);
       let endpoint = userRole === 'TEACHER' ? `/slots/teacher/${userId}` : '/slots/available';
+      console.log('CalendarSlotView - Fetching slots:', { userRole, userId, endpoint });
       const response = await api.get(endpoint);
+      console.log('CalendarSlotView - Slots response:', response.data);
       setSlots(response.data);
       setError('');
     } catch (err) {
+      console.error('CalendarSlotView - Fetch error:', err);
       setError('Failed to load slots: ' + (err.response?.data || err.message));
     } finally {
       setLoading(false);
@@ -543,7 +547,17 @@ function CalendarSlotView({ userId, userRole }) {
       </div>
 
       {successMessage && <div className="success">{successMessage}</div>}
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error" style={{ margin: '20px 0', padding: '15px', backgroundColor: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb', borderRadius: '5px' }}>
+          <strong>Error Details:</strong><br/>
+          {error}
+          <br/><br/>
+          <strong>Debug Info:</strong><br/>
+          User ID: {userId || 'null'}<br/>
+          User Role: {userRole || 'null'}<br/>
+          API Endpoint: {userRole === 'TEACHER' ? `/slots/teacher/${userId}` : '/slots/available'}
+        </div>
+      )}
 
       {editingSlot && (
         <div 
@@ -589,8 +603,14 @@ function CalendarSlotView({ userId, userRole }) {
       )}
 
       {loading ? (
-        <div className="loading">
+        <div className="loading" style={{ margin: '20px 0', padding: '15px', backgroundColor: '#d4edda', color: '#155724', border: '1px solid #c3e6cb', borderRadius: '5px' }}>
           <div>🔄 Loading your schedule...</div>
+          <div style={{ marginTop: '10px', fontSize: '0.9em' }}>
+            <strong>Debug Info:</strong><br/>
+            User ID: {userId || 'null'}<br/>
+            User Role: {userRole || 'null'}<br/>
+            API Endpoint: {userRole === 'TEACHER' ? `/slots/teacher/${userId}` : '/slots/available'}
+          </div>
         </div>
       ) : (
         <>
