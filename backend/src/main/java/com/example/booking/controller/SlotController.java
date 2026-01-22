@@ -6,6 +6,7 @@ import com.example.booking.repository.UserRepository;
 import com.example.booking.model.User;
 import com.example.booking.dto.SlotResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,7 +16,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", maxAge = 3600)
 @RestController
 @RequestMapping("/api/slots")
 public class SlotController {
@@ -28,16 +29,36 @@ public class SlotController {
 
     // Get the current calendar view for students (includes statuses so they understand whether a slot is pending/confirmed)
     @GetMapping("/available")
-    public ResponseEntity<?> getAvailableSlots() {
-        Comparator<AvailableSlot> byStartTime = Comparator.comparing(AvailableSlot::getStartTime,
-            Comparator.nullsLast(Comparator.naturalOrder()));
+    public ResponseEntity<?> getAvailableSlots(@RequestParam(value = "teacherId", required = false) Long teacherId) {
+        try {
+            Comparator<AvailableSlot> byStartTime = Comparator.comparing(AvailableSlot::getStartTime,
+                Comparator.nullsLast(Comparator.naturalOrder()));
 
-        List<SlotResponse> slotResponses = slotRepository.findAll().stream()
-            .filter(slot -> slot.getStatus() == null || !"DISABLED".equalsIgnoreCase(slot.getStatus()))
-            .sorted(byStartTime)
-            .map(SlotResponse::new)
-            .toList();
-        return ResponseEntity.ok(slotResponses);
+            List<AvailableSlot> slots;
+            if (teacherId != null) {
+                User teacher = userRepository.findById(teacherId)
+                        .orElseThrow(() -> new RuntimeException("Teacher not found"));
+
+                boolean isTeacher = teacher.getRoles().stream()
+                        .anyMatch(role -> "ROLE_TEACHER".equalsIgnoreCase(role.getName()));
+                if (!isTeacher) {
+                    return ResponseEntity.badRequest().body("Selected user is not registered as a teacher");
+                }
+
+                slots = slotRepository.findByTeacher_IdOrderByStartTimeAsc(teacherId);
+            } else {
+                slots = slotRepository.findAll();
+            }
+
+            List<SlotResponse> slotResponses = slots.stream()
+                .filter(slot -> slot.getStatus() == null || !"DISABLED".equalsIgnoreCase(slot.getStatus()))
+                .sorted(byStartTime)
+                .map(SlotResponse::new)
+                .toList();
+            return ResponseEntity.ok(slotResponses);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error fetching slots: " + e.getMessage());
+        }
     }
 
     // Get all slots for a specific teacher
@@ -87,6 +108,11 @@ public class SlotController {
                 return ResponseEntity.badRequest().body("End time must be after start time");
             }
 
+            if (slotRepository.existsByTeacher_IdAndStartTimeAndEndTime(teacherId, start, end)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body("A slot already exists for this teacher at the selected time.");
+            }
+
             AvailableSlot slot = new AvailableSlot();
             slot.setTeacher(teacher);
             slot.setStartTime(start);
@@ -109,7 +135,7 @@ public class SlotController {
             @RequestParam String endTime) {
         try {
             AvailableSlot slot = slotRepository.findById(slotId)
-                    .orElseThrow(() -> new RuntimeException("Slot not found"));
+                .orElseThrow(() -> new RuntimeException("Slot not found"));
 
             if (isLockedStatus(slot.getStatus())) {
                 return ResponseEntity.badRequest().body("Cannot edit slot while a booking is pending or confirmed");
@@ -120,6 +146,21 @@ public class SlotController {
 
             if (!start.isBefore(end)) {
                 return ResponseEntity.badRequest().body("End time must be after start time");
+            }
+
+                if (slot.getTeacher() == null) {
+                return ResponseEntity.badRequest().body("Slot is not associated with a teacher");
+                }
+
+                var conflictingSlot = slotRepository.findByTeacher_IdAndStartTimeAndEndTime(
+                    slot.getTeacher().getId(),
+                    start,
+                    end
+                );
+
+            if (conflictingSlot.isPresent() && !conflictingSlot.get().getId().equals(slotId)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body("Another slot already exists for this teacher at the selected time.");
             }
 
             slot.setStartTime(start);
@@ -138,7 +179,7 @@ public class SlotController {
     public ResponseEntity<?> deleteSlot(@PathVariable Long slotId) {
         try {
             AvailableSlot slot = slotRepository.findById(slotId)
-                    .orElseThrow(() -> new RuntimeException("Slot not found"));
+                .orElseThrow(() -> new RuntimeException("Slot not found"));
 
             if (isLockedStatus(slot.getStatus())) {
                 return ResponseEntity.badRequest().body("Cannot delete a slot with an active or pending booking");

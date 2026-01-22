@@ -125,6 +125,55 @@ body {
 
 /* Legacy header button styles removed */
 
+.teacher-filter-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  margin-bottom: 24px;
+  border: 1px solid #e5e7eb;
+}
+
+.teacher-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.teacher-filter-title {
+  margin: 0;
+  font-weight: 700;
+  color: #111827;
+}
+
+.teacher-filter-subtitle {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.teacher-filter-loading {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.teacher-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  font-size: 0.95rem;
+  background: #f9fafb;
+  margin-bottom: 10px;
+}
+
+.teacher-filter-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
 .calendar-week-view {
   background: white;
   border-radius: 16px;
@@ -1069,6 +1118,16 @@ body {
   background: #9ca3af;
 }
 
+.teacher-empty-state {
+  margin: 20px 0;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px dashed #cbd5f5;
+  background: #f8f7ff;
+  color: #4b3c8c;
+  text-align: center;
+}
+
 .success {
   background: #d4edda;
   color: #155724;
@@ -1113,6 +1172,16 @@ body {
   .view-controls {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .teacher-filter-card {
+    padding: 16px;
+  }
+
+  .teacher-filter-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 
   .calendar-day-view {

@@ -32,6 +32,8 @@ const formatBookingStatusLabel = (status) => {
 
 function CalendarSlotView({ userId, userRole }) {
   console.log('CalendarSlotView - Props received:', { userId, userRole });
+  const normalizedRoleInitial = userRole ? userRole.replace('ROLE_', '') : '';
+  const safeUserId = userId != null ? String(userId) : '';
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,13 +46,31 @@ function CalendarSlotView({ userId, userRole }) {
   const [editEndTime, setEditEndTime] = useState('');
   const [lessonType, setLessonType] = useState('weekly');
   const [busySlotKey, setBusySlotKey] = useState(null);
+  const [teachers, setTeachers] = useState([]);
+  const [teacherLoading, setTeacherLoading] = useState(() => normalizedRoleInitial === 'STUDENT');
+  const [selectedTeacherId, setSelectedTeacherId] = useState(() => (normalizedRoleInitial === 'TEACHER' ? safeUserId : ''));
   const navigate = useNavigate();
 
+  const normalizedRole = normalizedRoleInitial;
+  const isTeacher = normalizedRole === 'TEACHER';
+  const isStudent = normalizedRole === 'STUDENT';
+
   const fetchSlots = useCallback(async () => {
+    if (!safeUserId) {
+      return;
+    }
+
+    if (isStudent && !selectedTeacherId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      let endpoint = userRole === 'TEACHER' ? `/slots/teacher/${userId}` : '/slots/available';
-      console.log('CalendarSlotView - Fetching slots:', { userRole, userId, endpoint });
+      const endpoint = isTeacher
+        ? `/slots/teacher/${safeUserId}`
+        : `/slots/available?teacherId=${selectedTeacherId}`;
+      console.log('CalendarSlotView - Fetching slots:', { userRole: normalizedRole, userId: safeUserId, selectedTeacherId, endpoint });
       const response = await api.get(endpoint);
       console.log('CalendarSlotView - Slots response:', response.data);
       setSlots(response.data);
@@ -61,14 +81,57 @@ function CalendarSlotView({ userId, userRole }) {
     } finally {
       setLoading(false);
     }
-  }, [userId, userRole]);
+  }, [safeUserId, isTeacher, isStudent, normalizedRole, selectedTeacherId]);
+
+  useEffect(() => {
+    if (!isStudent) {
+      setTeacherLoading(false);
+      setTeachers([]);
+      setSelectedTeacherId(safeUserId);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadTeachers = async () => {
+      setTeacherLoading(true);
+      try {
+        const response = await api.get('/teachers');
+        if (!isMounted) return;
+
+        const teacherList = Array.isArray(response.data) ? response.data : [];
+        const sorted = teacherList.sort((a, b) => {
+          const nameA = (a.displayName || a.email || '').toLowerCase();
+          const nameB = (b.displayName || b.email || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+        setTeachers(sorted);
+        setSelectedTeacherId((prev) => prev || (sorted[0] ? String(sorted[0].id) : ''));
+      } catch (err) {
+        if (!isMounted) return;
+        console.error('CalendarSlotView - Teacher fetch error:', err);
+        setError('Failed to load teachers: ' + (err.response?.data || err.message));
+        setTeachers([]);
+      } finally {
+        if (isMounted) {
+          setTeacherLoading(false);
+        }
+      }
+    };
+
+    loadTeachers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isStudent, safeUserId]);
 
   useEffect(() => {
     fetchSlots();
   }, [fetchSlots]);
 
   const handleBookSlot = async (slotId, dayName, timeDisplay) => {
-    if (userRole !== 'STUDENT') return;
+    if (!isStudent) return;
 
     const readableDay = dayName || 'this day';
     const readableTime = timeDisplay || 'this time';
@@ -78,7 +141,7 @@ function CalendarSlotView({ userId, userRole }) {
     
     try {
       setBookingSlotId(slotId);
-      await api.post(`/bookings/book?studentId=${userId}&slotId=${slotId}`);
+      await api.post(`/bookings/book?studentId=${safeUserId}&slotId=${slotId}`);
       setSuccessMessage('✅ Weekly appointment booked successfully! This time slot is now reserved for you every week.');
       setTimeout(() => setSuccessMessage(''), 5000);
       fetchSlots();
@@ -99,12 +162,13 @@ function CalendarSlotView({ userId, userRole }) {
 
   const handleUpdateSlot = async () => {
     if (!editingSlot) return;
-    
+    if (!editStartTime || !editEndTime) {
+      setError('Both start and end times are required');
+      return;
+    }
+
     try {
-      const startISO = new Date(editStartTime).toISOString();
-      const endISO = new Date(editEndTime).toISOString();
-      
-      await api.put(`/slots/${editingSlot.id}?startTime=${startISO}&endTime=${endISO}`);
+      await api.put(`/slots/${editingSlot.id}?startTime=${encodeURIComponent(editStartTime)}&endTime=${encodeURIComponent(editEndTime)}`);
       setSuccessMessage('✅ Slot updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
       setEditingSlot(null);
@@ -137,9 +201,19 @@ function CalendarSlotView({ userId, userRole }) {
     const end = new Date(date);
     const [endHour, endMinute] = timeSlot.end.split(':').map((value) => Number.parseInt(value, 10));
     end.setHours(endHour, endMinute, 0, 0);
+
+    const toDateTimeLocalString = (dt) => {
+      const year = dt.getFullYear();
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      const hours = String(dt.getHours()).padStart(2, '0');
+      const minutes = String(dt.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     return {
-      startISO: start.toISOString(),
-      endISO: end.toISOString(),
+      startLocal: toDateTimeLocalString(start),
+      endLocal: toDateTimeLocalString(end),
       display: `${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
     };
   };
@@ -152,8 +226,8 @@ function CalendarSlotView({ userId, userRole }) {
       if (slot) {
         await api.post(`/slots/${slot.id}/enable`);
       } else {
-        const { startISO, endISO } = buildSlotDateTimes(dayDate, timeSlot);
-        await api.post(`/slots/create?teacherId=${userId}&startTime=${encodeURIComponent(startISO)}&endTime=${encodeURIComponent(endISO)}`);
+        const { startLocal, endLocal } = buildSlotDateTimes(dayDate, timeSlot);
+        await api.post(`/slots/create?teacherId=${safeUserId}&startTime=${encodeURIComponent(startLocal)}&endTime=${encodeURIComponent(endLocal)}`);
       }
       setSuccessMessage('🔔 Slot enabled for students');
       setTimeout(() => setSuccessMessage(''), 3500);
@@ -217,8 +291,7 @@ function CalendarSlotView({ userId, userRole }) {
     }
   };
 
-  const normalizedRole = userRole ? userRole.replace('ROLE_', '') : '';
-  const isTeacher = normalizedRole === 'TEACHER';
+  // normalizedRole, isTeacher and isStudent already derived earlier
 
   const formatDateTimeLocal = (date) => {
     const year = date.getFullYear();
@@ -566,11 +639,11 @@ function CalendarSlotView({ userId, userRole }) {
                     <span className="weekday-date">{day.fullDate}</span>
                   </div>
                   <div className="weekly-column-body">
-                    {(normalizedRole === 'TEACHER' ? day.teacherSlots : day.studentSlots).length === 0 ? (
+                    {(isTeacher ? day.teacherSlots : day.studentSlots).length === 0 ? (
                       <div className="weekly-placeholder">—</div>
                     ) : (
-                      (normalizedRole === 'TEACHER' ? day.teacherSlots : day.studentSlots).map((slotItem, index) => (
-                        normalizedRole === 'TEACHER'
+                      (isTeacher ? day.teacherSlots : day.studentSlots).map((slotItem, index) => (
+                        isTeacher
                           ? renderTeacherSlotCard(day, slotItem)
                           : renderStudentSlotCard({ ...slotItem, dayName: day.dayName }, index)
                       ))
@@ -687,7 +760,7 @@ function CalendarSlotView({ userId, userRole }) {
               Duration: {Math.round((new Date(slot.endTime) - new Date(slot.startTime)) / (1000 * 60))} minutes
             </div>
           </div>
-          {normalizedRole === 'STUDENT' && slotStatusValue === 'AVAILABLE' && (
+          {isStudent && slotStatusValue === 'AVAILABLE' && (
             <button 
               className="book-slot-button"
               onClick={() => {
@@ -753,8 +826,28 @@ function CalendarSlotView({ userId, userRole }) {
     );
   };
 
+  const activeTeacher = teachers.find((teacher) => String(teacher.id) === String(selectedTeacherId));
+  const activeTeacherLabel = activeTeacher?.displayName || activeTeacher?.email || '';
+  const currentEndpoint = isTeacher
+    ? `/slots/teacher/${safeUserId}`
+    : selectedTeacherId
+      ? `/slots/available?teacherId=${selectedTeacherId}`
+      : '/slots/available';
+  const showLoadingState = loading || teacherLoading;
+  const shouldRenderCalendar = isTeacher || Boolean(selectedTeacherId);
+  const introTitle = isTeacher
+    ? 'My Teaching Schedule'
+    : activeTeacherLabel
+      ? `${activeTeacherLabel} • Weekly Lessons`
+      : 'Choose a Teacher';
+  const introSubtitle = isTeacher
+    ? 'Manage your availability and student bookings'
+    : activeTeacherLabel
+      ? 'Students can only book slots published by this teacher.'
+      : 'Select a teacher to see their weekly availability.';
+
   // Safety check at render time - only check if completely invalid
-  if (!userId) {
+  if (!safeUserId) {
     return (
       <div className="calendar-container">
         <div className="loading">
@@ -782,8 +875,8 @@ function CalendarSlotView({ userId, userRole }) {
       <section className="calendar-intro-card">
         <div className="intro-icon" aria-hidden="true">📅</div>
         <div className="intro-text">
-          <h1>Mrs. Aya’s Teaching Schedule</h1>
-          <p>Manage your availability and student bookings</p>
+          <h1>{introTitle}</h1>
+          <p>{introSubtitle}</p>
         </div>
       </section>
 
@@ -807,6 +900,40 @@ function CalendarSlotView({ userId, userRole }) {
         </button>
       </div>
 
+      {isStudent && (
+        <div className="teacher-filter-card">
+          <div className="teacher-filter-header">
+            <div>
+              <p className="teacher-filter-title">Choose a teacher</p>
+              <p className="teacher-filter-subtitle">Students view one teacher’s calendar at a time.</p>
+            </div>
+            {teacherLoading && <span className="teacher-filter-loading">Loading…</span>}
+          </div>
+          <select
+            className="teacher-select"
+            value={selectedTeacherId}
+            onChange={(e) => setSelectedTeacherId(e.target.value)}
+            disabled={teacherLoading || teachers.length === 0}
+          >
+            <option value="">Select a teacher</option>
+            {teachers.map((teacher) => (
+              <option key={teacher.id} value={teacher.id}>
+                {teacher.displayName || teacher.email}
+              </option>
+            ))}
+          </select>
+          <p className="teacher-filter-hint">
+            {teacherLoading
+              ? 'Loading teachers…'
+              : teachers.length === 0
+                ? 'No teachers are available yet.'
+                : selectedTeacherId && activeTeacherLabel
+                  ? `Viewing ${activeTeacherLabel}'s weekly availability.`
+                  : 'Pick a teacher to load their schedule.'}
+          </p>
+        </div>
+      )}
+
       {successMessage && <div className="success">{successMessage}</div>}
       {error && (
         <div className="error" style={{ margin: '20px 0', padding: '15px', backgroundColor: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb', borderRadius: '5px' }}>
@@ -814,9 +941,10 @@ function CalendarSlotView({ userId, userRole }) {
           {error}
           <br/><br/>
           <strong>Debug Info:</strong><br/>
-          User ID: {userId || 'null'}<br/>
-          User Role: {userRole || 'null'}<br/>
-          API Endpoint: {userRole === 'TEACHER' ? `/slots/teacher/${userId}` : '/slots/available'}
+          User ID: {safeUserId || 'null'}<br/>
+          User Role: {normalizedRole || userRole || 'null'}<br/>
+          Current Endpoint: {currentEndpoint}<br/>
+          Selected Teacher: {selectedTeacherId || (isTeacher ? safeUserId : 'none')}
         </div>
       )}
 
@@ -863,19 +991,30 @@ function CalendarSlotView({ userId, userRole }) {
         </div>
       )}
 
-      {loading ? (
+      {showLoadingState ? (
         <div className="loading" style={{ margin: '20px 0', padding: '15px', backgroundColor: '#d4edda', color: '#155724', border: '1px solid #c3e6cb', borderRadius: '5px' }}>
           <div>🔄 Loading your schedule...</div>
           <div style={{ marginTop: '10px', fontSize: '0.9em' }}>
             <strong>Debug Info:</strong><br/>
-            User ID: {userId || 'null'}<br/>
-            User Role: {userRole || 'null'}<br/>
-            API Endpoint: {userRole === 'TEACHER' ? `/slots/teacher/${userId}` : '/slots/available'}
+            User ID: {safeUserId || 'null'}<br/>
+            User Role: {normalizedRole || userRole || 'null'}<br/>
+            API Endpoint: {currentEndpoint}<br/>
+            Selected Teacher: {selectedTeacherId || (isTeacher ? safeUserId : 'none')}
           </div>
         </div>
       ) : (
         <>
-          {viewMode === 'week' ? <WeekView /> : <DayView />}
+          {shouldRenderCalendar ? (
+            viewMode === 'week' ? <WeekView /> : <DayView />
+          ) : (
+            <div className="teacher-empty-state">
+              <p>
+                {teachers.length === 0
+                  ? 'No teachers have published availability yet. Check back soon.'
+                  : 'Pick a teacher from the dropdown above to see their weekly schedule.'}
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -48,10 +48,15 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(request -> {
                     org.springframework.web.cors.CorsConfiguration config = new org.springframework.web.cors.CorsConfiguration();
-                    config.setAllowedOriginPatterns(java.util.Arrays.asList("*"));
+                    config.setAllowedOrigins(java.util.Arrays.asList(
+                        "http://localhost",
+                        "http://localhost:3000",
+                        "http://127.0.0.1",
+                        "http://127.0.0.1:3000"
+                    ));
                     config.setAllowedMethods(java.util.Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
                     config.setAllowedHeaders(java.util.Arrays.asList("*"));
-                    config.setAllowCredentials(false);
+                    config.setAllowCredentials(true);
                     return config;
                 }))
             .csrf(csrf -> csrf.disable())

@@ -6,19 +6,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
+@Table(
+    name = "available_slot",
+    uniqueConstraints = @UniqueConstraint(
+        name = "uk_teacher_timeslot",
+        columnNames = {"teacher_id", "start_time", "end_time"}
+    )
+)
 public class AvailableSlot {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
+
+    @Column(name = "end_time", nullable = false)
     private LocalDateTime endTime;
 
     @Column(nullable = false)
     private String status = "AVAILABLE"; // Available, Booked, Cancelled [cite: 20]
 
     @ManyToOne
-    @JoinColumn(name = "teacher_id")
+    @JoinColumn(name = "teacher_id", nullable = false)
     private User teacher;
 
     @OneToMany(mappedBy = "slot", cascade = CascadeType.ALL, orphanRemoval = true)

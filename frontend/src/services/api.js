@@ -7,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Add token to requests
@@ -20,10 +21,10 @@ api.interceptors.request.use((config) => {
 
 export const authService = {
   signup: ({ username, password, role, firstName, lastName }) => 
-    api.post('/auth/signup', { username, password, role, firstName, lastName }),
+    axios.post(`${API_BASE_URL}/auth/signup`, { username, password, role, firstName, lastName }, { withCredentials: true }),
   
   signin: (username, password) => 
-    api.post('/auth/signin', { username, password }),
+    axios.post(`${API_BASE_URL}/auth/signin`, { username, password }, { withCredentials: true }),
 };
 
 export default api;
