@@ -2,33 +2,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
+import TeacherFilter from '../components/calendar/TeacherFilter';
+import SlotEditorModal from '../components/calendar/SlotEditorModal';
+import WeekView from '../components/calendar/WeekView';
+import { formatBookingStatusLabel, getStatusStyles } from '../constants/slotMeta';
+import {
+  isSameDay,
+  formatTime,
+  buildSlotDateTimes,
+  makeSlotKey,
+} from '../utils/calendarUtils';
 import api from '../services/api';
 import './CalendarSlotView.css';
-
-const SLOT_STATUS_META = {
-  AVAILABLE: { label: 'Available', icon: '✅', className: 'status-available' },
-  PENDING: { label: 'Pending approval', icon: '⏳', className: 'status-pending' },
-  BOOKED: { label: 'Confirmed', icon: '🔒', className: 'status-booked' },
-  DISABLED: { label: 'Disabled', icon: '🚫', className: 'status-disabled' },
-  CHANGES_REQUESTED: { label: 'Changes requested', icon: '📝', className: 'status-changes' },
-  UNPUBLISHED: { label: 'Not enabled', icon: '🚫', className: 'status-disabled' }
-};
-
-const formatBookingStatusLabel = (status) => {
-  if (!status) return 'Pending';
-  const map = {
-    AVAILABLE: 'Available for students',
-    BOOKED: 'Confirmed lesson',
-    DISABLED: 'Hidden from students',
-    UNPUBLISHED: 'Not enabled yet',
-    PENDING: 'Waiting for your response',
-    CHANGES_REQUESTED: 'Teacher asked for edits',
-    CONFIRMED: 'Confirmed lesson',
-    REJECTED: 'Rejected',
-    CANCELLED: 'Cancelled'
-  };
-  return map[status] || status;
-};
 
 function CalendarSlotView({ userId, userRole }) {
   console.log('CalendarSlotView - Props received:', { userId, userRole });
@@ -192,31 +177,7 @@ function CalendarSlotView({ userId, userRole }) {
     }
   };
 
-  const makeSlotKey = (dayDate, timeSlot, slot) => (slot?.id ? `slot-${slot.id}` : `${dayDate.toISOString()}-${timeSlot.start}`);
-
-  const buildSlotDateTimes = (date, timeSlot) => {
-    const start = new Date(date);
-    const [startHour, startMinute] = timeSlot.start.split(':').map((value) => Number.parseInt(value, 10));
-    start.setHours(startHour, startMinute, 0, 0);
-    const end = new Date(date);
-    const [endHour, endMinute] = timeSlot.end.split(':').map((value) => Number.parseInt(value, 10));
-    end.setHours(endHour, endMinute, 0, 0);
-
-    const toDateTimeLocalString = (dt) => {
-      const year = dt.getFullYear();
-      const month = String(dt.getMonth() + 1).padStart(2, '0');
-      const day = String(dt.getDate()).padStart(2, '0');
-      const hours = String(dt.getHours()).padStart(2, '0');
-      const minutes = String(dt.getMinutes()).padStart(2, '0');
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
-
-    return {
-      startLocal: toDateTimeLocalString(start),
-      endLocal: toDateTimeLocalString(end),
-      display: `${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-    };
-  };
+  // buildSlotDateTimes and makeSlotKey now imported from calendar utils
 
   const handleSlotEnable = async (dayDate, timeSlot, slot) => {
     if (busySlotKey) return;
@@ -302,63 +263,7 @@ function CalendarSlotView({ userId, userRole }) {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  // Get available time slots helper function
-  const getAvailableTimeSlots = (date) => {
-    const dayOfWeek = date.getDay();
-    
-    if (dayOfWeek === 0) {
-      return [
-        { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
-        { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
-        { start: '21:00', end: '22:00', display: '9:00 PM – 10:00 PM' },
-        { start: '22:00', end: '23:00', display: '10:00 PM – 11:00 PM' }
-      ];
-    }
-    
-    if (dayOfWeek === 6) {
-      return [
-        { start: '09:00', end: '10:00', display: '9:00 AM – 10:00 AM' },
-        { start: '10:00', end: '11:00', display: '10:00 AM – 11:00 AM' }
-      ];
-    }
-    
-    return [
-      { start: '15:00', end: '16:00', display: '3:00 PM – 4:00 PM' },
-      { start: '16:00', end: '17:00', display: '4:00 PM – 5:00 PM' },
-      { start: '17:00', end: '18:00', display: '5:00 PM – 6:00 PM' },
-      { start: '18:00', end: '19:00', display: '6:00 PM – 7:00 PM' },
-      { start: '19:00', end: '20:00', display: '7:00 PM – 8:00 PM' },
-      { start: '20:00', end: '21:00', display: '8:00 PM – 9:00 PM' }
-    ];
-  };
-
-  // Helper functions for date calculations
-  const getWeekDates = (date) => {
-    const week = [];
-    const startOfWeek = new Date(date);
-    const day = startOfWeek.getDay();
-    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Start on Monday
-    startOfWeek.setDate(diff);
-    
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(startOfWeek);
-      day.setDate(startOfWeek.getDate() + i);
-      week.push(day);
-    }
-    return week;
-  };
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true 
-    });
-  };
-
-  const isSameDay = (date1, date2) => {
-    return date1.toDateString() === date2.toDateString();
-  };
+  // Time helpers imported from calendar utils
 
   const getSlotsForDate = (date) => {
     return slots.filter(slot => {
@@ -385,301 +290,7 @@ function CalendarSlotView({ userId, userRole }) {
     setSelectedDate(new Date());
   };
 
-  const getSlotStatus = (slot) => {
-    if (!slot) return null;
-    
-    const statusColors = {
-      AVAILABLE: { bg: '#d1f4e0', border: '#22c55e', text: '#166534' },
-      PENDING: { bg: '#fff4d6', border: '#f6c343', text: '#7a4b00' },
-      BOOKED: { bg: '#e9e7ff', border: '#7c3aed', text: '#3c1c7d' },
-      CHANGES_REQUESTED: { bg: '#fef3c7', border: '#fbbf24', text: '#92400e' },
-      DISABLED: { bg: '#f3f4f6', border: '#d1d5db', text: '#374151' },
-      CANCELLED: { bg: '#f8d7da', border: '#dc3545', text: '#721c24' }
-    };
-    
-    return statusColors[slot.status] || statusColors.AVAILABLE;
-  };
-
-  // Week View Component - click slots to control availability
-  const WeekView = () => {
-    const weekDates = getWeekDates(new Date());
-    const today = new Date();
-
-    const weeklyData = weekDates.map((date) => {
-      const existingSlots = getSlotsForDate(date);
-
-      const teacherSlots = getAvailableTimeSlots(date).map((templateSlot) => {
-        const matchedSlot = existingSlots.find((slot) => {
-          const slotStart = new Date(slot.startTime);
-          const slotHour = slotStart.getHours().toString().padStart(2, '0');
-          const slotMinute = slotStart.getMinutes().toString().padStart(2, '0');
-          return `${slotHour}:${slotMinute}` === templateSlot.start;
-        });
-
-        return {
-          ...templateSlot,
-          slot: matchedSlot,
-          status: matchedSlot ? matchedSlot.status : 'UNPUBLISHED',
-          booking: matchedSlot?.currentBooking || null,
-          date,
-        };
-      });
-
-      const studentSlots = existingSlots
-        .filter((slot) => slot.status !== 'DISABLED')
-        .map((slot) => {
-          const slotStart = new Date(slot.startTime);
-          const slotEnd = new Date(slot.endTime);
-          return {
-            slot,
-            status: slot.status,
-            display: `${slotStart.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} – ${slotEnd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
-            startTime: slotStart,
-            endTime: slotEnd,
-          };
-        });
-
-      return {
-        date,
-        dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
-        shortName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-        fullDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        isToday: isSameDay(date, today),
-        teacherSlots,
-        studentSlots,
-      };
-    });
-
-    const helperCopy = lessonType === 'weekly'
-      ? 'Weekly lessons repeat automatically. Toggle any slot to instantly enable or disable student access.'
-      : 'Single lessons are perfect for ad-hoc sessions. This view is coming soon.';
-
-    const renderTeacherSlotCard = (day, timeSlot) => {
-      const slot = timeSlot.slot;
-      const slotStatus = slot ? slot.status : 'UNPUBLISHED';
-      const booking = slot?.currentBooking;
-      const statusMeta = SLOT_STATUS_META[slotStatus] || SLOT_STATUS_META.UNPUBLISHED;
-      const slotKey = makeSlotKey(day.date, timeSlot, slot);
-      const slotBusy = busySlotKey === slotKey;
-      const bookingBusy = booking ? busySlotKey === `booking-${booking.id}` : false;
-
-      const renderActions = () => {
-        if (normalizedRole !== 'TEACHER') return null;
-        if (!slot) {
-          return (
-            <button
-              type="button"
-              className="slot-action primary"
-              onClick={() => handleSlotEnable(day.date, timeSlot, null)}
-              disabled={slotBusy}
-            >
-              {slotBusy ? 'Enabling…' : 'Enable slot'}
-            </button>
-          );
-        }
-
-        if (slot.status === 'DISABLED') {
-          return (
-            <button
-              type="button"
-              className="slot-action primary"
-              onClick={() => handleSlotEnable(day.date, timeSlot, slot)}
-              disabled={slotBusy}
-            >
-              {slotBusy ? 'Enabling…' : 'Enable slot'}
-            </button>
-          );
-        }
-
-        if (slot.status === 'AVAILABLE') {
-          return (
-            <div className="slot-action-row">
-              <button type="button" className="slot-action ghost" onClick={() => handleSlotDisable(slot.id)} disabled={slotBusy}>
-                {slotBusy ? 'Working…' : 'Disable'}
-              </button>
-              <button type="button" className="slot-action ghost" onClick={() => handleEditSlot(slot)}>
-                Edit
-              </button>
-              <button type="button" className="slot-action danger" onClick={() => handleDeleteSlot(slot.id)} disabled={slotBusy}>
-                {slotBusy ? 'Removing…' : 'Delete'}
-              </button>
-            </div>
-          );
-        }
-
-        if (slot.status === 'PENDING' || slot.status === 'CHANGES_REQUESTED') {
-          return (
-            <div className="slot-action-row decision">
-              <button type="button" className="slot-action success" onClick={() => handleBookingDecision(booking?.id, 'approve')} disabled={bookingBusy || !booking}>
-                {bookingBusy ? 'Updating…' : 'Accept'}
-              </button>
-              <button type="button" className="slot-action ghost" onClick={() => handleBookingDecision(booking?.id, 'request_changes')} disabled={bookingBusy || !booking}>
-                {bookingBusy ? 'Updating…' : 'Request changes'}
-              </button>
-              <button type="button" className="slot-action danger" onClick={() => handleBookingDecision(booking?.id, 'reject')} disabled={bookingBusy || !booking}>
-                {bookingBusy ? 'Updating…' : 'Reject'}
-              </button>
-            </div>
-          );
-        }
-
-        return (
-          <div className="slot-lock-msg">
-            <span>Lesson confirmed</span>
-            <small>Cancel from the booking tab.</small>
-          </div>
-        );
-      };
-
-      return (
-        <div key={`${day.shortName}-${timeSlot.start}`} className={`slot-card ${statusMeta.className}`}>
-          <div className="slot-card-head">
-            <span className="slot-time">{timeSlot.display}</span>
-            <span className={`slot-status-pill ${statusMeta.className}`}>
-              {statusMeta.icon} {statusMeta.label}
-            </span>
-          </div>
-          {booking && (
-            <div className="slot-booking-summary">
-              <span className="booking-avatar">👤</span>
-              <div>
-                <strong>{booking.studentName || 'Student'}</strong>
-                <small>{formatBookingStatusLabel(booking.status)}</small>
-              </div>
-            </div>
-          )}
-          {!booking && slotStatus === 'UNPUBLISHED' && (
-            <p className="slot-note">Turn this on so students can book it.</p>
-          )}
-          {slot && slot.status === 'DISABLED' && (
-            <p className="slot-note">Hidden from students until you enable it.</p>
-          )}
-          {slot && slot.status === 'BOOKED' && booking && (
-            <p className="slot-note">Booked by {booking.studentName || 'student'}</p>
-          )}
-          {renderActions()}
-        </div>
-      );
-    };
-
-    const renderStudentSlotCard = (slotWrapper, index) => {
-      const slot = slotWrapper.slot;
-      const statusMeta = SLOT_STATUS_META[slot.status] || SLOT_STATUS_META.AVAILABLE;
-      const showBookCta = slot.status === 'AVAILABLE';
-      const isLocked = slot.status === 'BOOKED';
-
-      return (
-        <div key={`student-slot-${slot.id}-${index}`} className={`slot-card ${statusMeta.className}`}>
-          <div className="slot-card-head">
-            <span className="slot-time">{slotWrapper.display}</span>
-            <span className={`slot-status-pill ${statusMeta.className}`}>
-              {statusMeta.icon} {statusMeta.label}
-            </span>
-          </div>
-          {isLocked && (
-            <div className="slot-booking-summary">
-              <span className="booking-avatar">🔒</span>
-              <div>
-                <strong>Reserved</strong>
-                <small>This session is confirmed for another student.</small>
-              </div>
-            </div>
-          )}
-          {showBookCta ? (
-            <button
-              type="button"
-              className="slot-action primary full"
-              onClick={() => handleBookSlot(slot.id, slotWrapper.dayName || '', slotWrapper.display)}
-              disabled={bookingSlotId === slot.id}
-            >
-              {bookingSlotId === slot.id ? 'Booking…' : 'Book this slot'}
-            </button>
-          ) : (
-            <p className="slot-note subtle">{formatBookingStatusLabel(slot.status)}</p>
-          )}
-        </div>
-      );
-    };
-
-    return (
-      <div className="calendar-week-view modern">
-        <div className="weekly-tabs">
-          <button
-            type="button"
-            className={`weekly-tab ${lessonType === 'weekly' ? 'active' : ''}`}
-            onClick={() => setLessonType('weekly')}
-          >
-            <span className="tab-title">Weekly lessons</span>
-            <span className="tab-subtitle">Perfect for recurring students</span>
-          </button>
-          <button
-            type="button"
-            className={`weekly-tab ${lessonType === 'single' ? 'active' : ''}`}
-            onClick={() => setLessonType('single')}
-          >
-            <span className="tab-title">Single lessons</span>
-            <span className="tab-subtitle">Plan ad-hoc sessions</span>
-          </button>
-        </div>
-
-        <p className="lesson-helper-text">{helperCopy}</p>
-
-        {lessonType === 'single' ? (
-          <div className="single-lessons-placeholder">
-            <h3>Single lessons view</h3>
-            <p>This mode is coming soon. For now, manage recurring lessons via the Weekly view.</p>
-          </div>
-        ) : (
-          <>
-            <div className="weekly-grid">
-              {weeklyData.map((day) => (
-                <div key={day.date.toISOString()} className={`weekly-column ${day.isToday ? 'is-today' : ''}`}>
-                  <div className={`weekly-column-header ${day.isToday ? 'is-today' : ''}`}>
-                    <span className="weekday-name">{day.shortName}</span>
-                    <span className="weekday-date">{day.fullDate}</span>
-                  </div>
-                  <div className="weekly-column-body">
-                    {(isTeacher ? day.teacherSlots : day.studentSlots).length === 0 ? (
-                      <div className="weekly-placeholder">—</div>
-                    ) : (
-                      (isTeacher ? day.teacherSlots : day.studentSlots).map((slotItem, index) => (
-                        isTeacher
-                          ? renderTeacherSlotCard(day, slotItem)
-                          : renderStudentSlotCard({ ...slotItem, dayName: day.dayName }, index)
-                      ))
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="legend-simple modern">
-              <div className="legend-item">
-                <span className="legend-dot available"></span>
-                <span>Students can book</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot pending"></span>
-                <span>Awaiting approval</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot confirmed"></span>
-                <span>Confirmed lesson</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot changes"></span>
-                <span>Changes requested</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot disabled"></span>
-                <span>Disabled slot</span>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
+  // Status colors now provided by getStatusStyles
 
   // Day View Component
   const DayView = () => {
@@ -728,7 +339,7 @@ function CalendarSlotView({ userId, userRole }) {
     };
 
     const renderStudentDaySlot = (slot) => {
-      const statusStyle = getSlotStatus(slot);
+      const statusStyle = getStatusStyles(slot.status);
       const slotStatusValue = (slot.status || '').toUpperCase();
       return (
         <div 
@@ -901,37 +512,13 @@ function CalendarSlotView({ userId, userRole }) {
       </div>
 
       {isStudent && (
-        <div className="teacher-filter-card">
-          <div className="teacher-filter-header">
-            <div>
-              <p className="teacher-filter-title">Choose a teacher</p>
-              <p className="teacher-filter-subtitle">Students view one teacher’s calendar at a time.</p>
-            </div>
-            {teacherLoading && <span className="teacher-filter-loading">Loading…</span>}
-          </div>
-          <select
-            className="teacher-select"
-            value={selectedTeacherId}
-            onChange={(e) => setSelectedTeacherId(e.target.value)}
-            disabled={teacherLoading || teachers.length === 0}
-          >
-            <option value="">Select a teacher</option>
-            {teachers.map((teacher) => (
-              <option key={teacher.id} value={teacher.id}>
-                {teacher.displayName || teacher.email}
-              </option>
-            ))}
-          </select>
-          <p className="teacher-filter-hint">
-            {teacherLoading
-              ? 'Loading teachers…'
-              : teachers.length === 0
-                ? 'No teachers are available yet.'
-                : selectedTeacherId && activeTeacherLabel
-                  ? `Viewing ${activeTeacherLabel}'s weekly availability.`
-                  : 'Pick a teacher to load their schedule.'}
-          </p>
-        </div>
+        <TeacherFilter
+          teachers={teachers}
+          loading={teacherLoading}
+          selectedTeacherId={selectedTeacherId}
+          onSelect={setSelectedTeacherId}
+          activeTeacherLabel={activeTeacherLabel}
+        />
       )}
 
       {successMessage && <div className="success">{successMessage}</div>}
@@ -948,48 +535,15 @@ function CalendarSlotView({ userId, userRole }) {
         </div>
       )}
 
-      {editingSlot && (
-        <div 
-          className="modal-overlay" 
-          onClick={() => setEditingSlot(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setEditingSlot(null)}
-          role="dialog"
-          aria-modal="true"
-          tabIndex={-1}
-        >
-          <div 
-            className="modal-content" 
-            onClick={(e) => e.stopPropagation()}
-            role="document"
-          >
-            <h3>Edit Time Slot</h3>
-            <div className="form-group">
-              <label htmlFor="edit-start-time">Start Time:</label>
-              <input 
-                id="edit-start-time"
-                type="datetime-local" 
-                value={editStartTime}
-                onChange={(e) => setEditStartTime(e.target.value)}
-                className="form-control"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="edit-end-time">End Time:</label>
-              <input 
-                id="edit-end-time"
-                type="datetime-local" 
-                value={editEndTime}
-                onChange={(e) => setEditEndTime(e.target.value)}
-                className="form-control"
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn-save" onClick={handleUpdateSlot}>Save Changes</button>
-              <button className="btn-cancel" onClick={() => setEditingSlot(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SlotEditorModal
+        isOpen={Boolean(editingSlot)}
+        startValue={editStartTime}
+        endValue={editEndTime}
+        onChangeStart={setEditStartTime}
+        onChangeEnd={setEditEndTime}
+        onSave={handleUpdateSlot}
+        onClose={() => setEditingSlot(null)}
+      />
 
       {showLoadingState ? (
         <div className="loading" style={{ margin: '20px 0', padding: '15px', backgroundColor: '#d4edda', color: '#155724', border: '1px solid #c3e6cb', borderRadius: '5px' }}>
@@ -1005,7 +559,26 @@ function CalendarSlotView({ userId, userRole }) {
       ) : (
         <>
           {shouldRenderCalendar ? (
-            viewMode === 'week' ? <WeekView /> : <DayView />
+            viewMode === 'week' ? (
+              <WeekView
+                isTeacher={isTeacher}
+                lessonType={lessonType}
+                onLessonTypeChange={setLessonType}
+                busySlotKey={busySlotKey}
+                bookingSlotId={bookingSlotId}
+                handleSlotEnable={handleSlotEnable}
+                handleSlotDisable={handleSlotDisable}
+                handleEditSlot={handleEditSlot}
+                handleDeleteSlot={handleDeleteSlot}
+                handleBookingDecision={handleBookingDecision}
+                handleBookSlot={handleBookSlot}
+                getSlotsForDate={getSlotsForDate}
+                isSameDay={isSameDay}
+                makeSlotKey={makeSlotKey}
+              />
+            ) : (
+              <DayView />
+            )
           ) : (
             <div className="teacher-empty-state">
               <p>
